@@ -1,0 +1,5 @@
+{
+  "name": "Questect",
+  "description": "Intelligent Minimalist AI Grading Platform - Global Standards, Local Precision.",
+  "requestFramePermissions": ["camera"]
+}

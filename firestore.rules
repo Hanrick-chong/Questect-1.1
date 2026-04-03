@@ -1,0 +1,270 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (from Auth)
+    // Fields:
+    //   - uid: string (required) - User ID
+    //   - email: string (required) - User email
+    //   - role: string (required) - 'educator' or 'admin'
+    //   - syllabus: string (required) - Selected syllabus
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - plan: string (required) - 'free', 'starter', 'pro', etc.
+    //   - examGraderTrialsUsedToday: number (optional)
+    //   - lastTrialResetDate: timestamp (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: subscriptions
+    // Document ID: subId (auto-generated)
+    // Fields:
+    //   - userId: string (required) - Owner of the subscription
+    //   - plan: string (required) - Plan name
+    //   - status: string (required) - 'active', 'canceled', etc.
+    //   - currentPeriodEnd: timestamp (optional)
+    //   - cancelAtPeriodEnd: bool (optional)
+    //   - stripeCustomerId: string (optional)
+    //   - stripeSubscriptionId: string (optional)
+    //
+    // Collection: history
+    // Document ID: historyId (auto-generated)
+    // Fields:
+    //   - userId: string (required) - Owner of the history record
+    //   - type: string (required) - 'quick' or 'exam'
+    //   - timestamp: timestamp (required)
+    //   - studentCount: number (required)
+    //   - subject: string (optional)
+    //   - level: string (optional)
+    //   - summary: string (optional)
+    //
+    // Collection: reports
+    // Document ID: reportId (auto-generated)
+    // Fields:
+    //   - userId: string (required) - Owner of the report
+    //   - timestamp: timestamp (required)
+    //   - academicLevel: string (optional)
+    //   - subject: string (optional)
+    //   - reports: list (required) - Array of student reports
+    //   - mode: string (required) - 'analyze' or 'system'
+    //
+    // Collection: student_records
+    // Document ID: recordId (auto-generated)
+    // Fields:
+    //   - userId: string (required) - Owner of the record
+    //   - historyId: string (required) - Reference to history record
+    //   - studentName: string (required)
+    //   - score: number (required)
+    //   - maxScore: number (required)
+    //   - feedback: string (optional)
+    //   - improvementSuggestions: string (optional)
+    //   - examTips: string (optional)
+    //   - detailedResults: list (optional)
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: payment_events
+    // Document ID: eventId (auto-generated)
+    // Fields:
+    //   - userId: string (required) - Owner of the event
+    //   - type: string (required) - Event type
+    //   - amount: number (optional)
+    //   - currency: string (optional)
+    //   - status: string (optional)
+    //   - stripeEventId: string (optional)
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: files
+    // Document ID: fileId (auto-generated)
+    // Fields:
+    //   - userId: string (required) - Owner of the file
+    //   - fileName: string (required)
+    //   - fileType: string (required)
+    //   - fileUrl: string (required)
+    //   - extractedText: string (optional)
+    //   - status: string (required) - 'uploading', 'processing', etc.
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: enterprise_inquiries
+    // Document ID: inquiryId (auto-generated)
+    // Fields:
+    //   - fullName: string (required)
+    //   - workEmail: string (required)
+    //   - phoneNumber: string (optional)
+    //   - institutionName: string (required)
+    //   - role: string (required)
+    //   - institutionType: string (required)
+    //   - teamSize: string (required)
+    //   - academicContext: string (required)
+    //   - interests: list (optional)
+    //   - message: string (optional)
+    //   - status: string (required) - 'new', 'contacted', etc.
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "cbumsteak@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isRecent(ts) {
+      return ts is timestamp && ts <= request.time && ts > request.time - duration.value(5, 'm');
+    }
+
+    function isPositive(val) {
+      return val is number && val >= 0;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'role', 'syllabus', 'displayName', 'photoURL', 'plan', 'examGraderTrialsUsedToday', 'lastTrialResetDate', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (data.role == null || data.role in ['educator', 'admin']) &&
+             (data.plan == null || data.plan in ['free', 'starter', 'pro', 'advanced', 'growth', 'enterprise']) &&
+             (data.examGraderTrialsUsedToday == null || data.examGraderTrialsUsedToday is number) &&
+             (data.lastTrialResetDate == null || data.lastTrialResetDate is string) &&
+             (data.createdAt == null || data.createdAt is timestamp);
+    }
+
+    function isValidSubscription(data) {
+      return hasOnlyAllowedFields(['userId', 'plan', 'status', 'currentPeriodEnd', 'cancelAtPeriodEnd', 'stripeCustomerId', 'stripeSubscriptionId']) &&
+             data.userId == request.auth.uid &&
+             data.status in ['active', 'canceled', 'past_due', 'incomplete'];
+    }
+
+    function isValidHistory(data) {
+      return hasOnlyAllowedFields(['userId', 'type', 'timestamp', 'studentCount', 'subject', 'level', 'summary']) &&
+             data.userId == request.auth.uid &&
+             data.type in ['quick', 'exam'] &&
+             data.timestamp is timestamp &&
+             isPositive(data.studentCount);
+    }
+
+    function isValidStudentRecord(data) {
+      return hasOnlyAllowedFields(['userId', 'historyId', 'studentName', 'score', 'maxScore', 'feedback', 'improvementSuggestions', 'examTips', 'detailedResults', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.studentName is string && data.studentName.size() > 0 && data.studentName.size() < 100 &&
+             isPositive(data.score) &&
+             isPositive(data.maxScore) &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidFile(data) {
+      return hasOnlyAllowedFields(['userId', 'fileName', 'fileType', 'fileUrl', 'extractedText', 'status', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.status in ['uploading', 'processing', 'completed', 'error'] &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidReport(data) {
+      return hasOnlyAllowedFields(['userId', 'timestamp', 'academicLevel', 'subject', 'reports', 'mode']) &&
+             data.userId == request.auth.uid &&
+             data.timestamp is timestamp &&
+             data.reports is list &&
+             (data.subject == null || data.subject is string) &&
+             data.mode in ['analyze', 'system'];
+    }
+
+    function isValidPaymentEvent(data) {
+      return hasOnlyAllowedFields(['userId', 'type', 'amount', 'currency', 'status', 'stripeEventId', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.type in ['payment_succeeded', 'payment_failed', 'subscription_created', 'subscription_updated', 'subscription_deleted'] &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidEnterpriseInquiry(data) {
+      return hasOnlyAllowedFields(['fullName', 'workEmail', 'phoneNumber', 'institutionName', 'role', 'institutionType', 'teamSize', 'academicContext', 'interests', 'message', 'status', 'createdAt']) &&
+             data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+             isValidEmail(data.workEmail) &&
+             data.institutionName is string && data.institutionName.size() > 0 &&
+             data.status in ['new', 'contacted', 'resolved'] &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && 
+                        (resource.data.role == null || request.resource.data.role == resource.data.role) &&
+                        (resource.data.plan == null || request.resource.data.plan == resource.data.plan)) || 
+                      isAdmin();
+    }
+
+    match /subscriptions/{subId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow write: if isAdmin(); // Only admin (or backend via admin SDK) can manage subscriptions
+    }
+
+    match /history/{historyId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidHistory(request.resource.data);
+      allow update: if isDocOwner() && isValidHistory(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidReport(request.resource.data);
+      allow update: if isDocOwner() && isValidReport(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /student_records/{recordId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidStudentRecord(request.resource.data);
+      allow update: if isDocOwner() && isValidStudentRecord(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /payment_events/{eventId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow write: if isAdmin(); // Only admin/backend can write payment events
+    }
+
+    match /files/{fileId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidFile(request.resource.data);
+      allow update: if isDocOwner() && isValidFile(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /enterprise_inquiries/{inquiryId} {
+      allow read: if isAdmin(); // Only admins can read inquiries
+      allow create: if isValidEnterpriseInquiry(request.resource.data); // Anyone can submit an inquiry (even unauthenticated if needed, but we check email format)
+      allow update, delete: if isAdmin();
+    }
+  }
+}

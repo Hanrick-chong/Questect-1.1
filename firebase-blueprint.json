@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user professional profile information and settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["educator", "admin"] },
+        "syllabus": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "plan": { "type": "string", "enum": ["free", "starter", "pro", "advanced", "growth", "enterprise"] },
+        "examGraderTrialsUsedToday": { "type": "number" },
+        "lastTrialResetDate": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "syllabus", "plan"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "User subscription details and status.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "plan": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "canceled", "past_due", "incomplete"] },
+        "currentPeriodEnd": { "type": "string", "format": "date-time" },
+        "cancelAtPeriodEnd": { "type": "boolean" },
+        "stripeCustomerId": { "type": "string" },
+        "stripeSubscriptionId": { "type": "string" }
+      },
+      "required": ["userId", "plan", "status"]
+    },
+    "GradingHistory": {
+      "title": "Grading History",
+      "description": "Historical records of grading activities.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["quick", "exam"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "studentCount": { "type": "number" },
+        "subject": { "type": "string" },
+        "level": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": ["userId", "type", "timestamp"]
+    },
+    "StudentRecord": {
+      "title": "Student Record",
+      "description": "Individual grading results for a student.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "historyId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "score": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "feedback": { "type": "string" },
+        "improvementSuggestions": { "type": "string" },
+        "examTips": { "type": "string" },
+        "detailedResults": { "type": "array" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "historyId", "studentName", "score"]
+    },
+    "UploadedFile": {
+      "title": "Uploaded File",
+      "description": "Metadata for files uploaded by the user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "extractedText": { "type": "string" },
+        "status": { "type": "string", "enum": ["uploading", "processing", "completed", "error"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "fileName", "fileType", "status"]
+    },
+    "GradingReport": {
+      "title": "Grading Report",
+      "description": "Consolidated report for a grading session.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "academicLevel": { "type": "string" },
+        "subject": { "type": "string" },
+        "reports": { "type": "array" },
+        "mode": { "type": "string", "enum": ["analyze", "system"] }
+      },
+      "required": ["userId", "timestamp", "reports", "mode"]
+    },
+    "PaymentEvent": {
+      "title": "Payment Event",
+      "description": "Records of payment-related events (success, failure, etc.).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["payment_succeeded", "payment_failed", "subscription_created", "subscription_updated", "subscription_deleted"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string" },
+        "stripeEventId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "timestamp"]
+    },
+    "EnterpriseInquiry": {
+      "title": "Enterprise Inquiry",
+      "description": "An inquiry from a school or institution for the Enterprise plan.",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "workEmail": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "institutionName": { "type": "string" },
+        "role": { "type": "string" },
+        "institutionType": { "type": "string" },
+        "teamSize": { "type": "string" },
+        "academicContext": { "type": "string" },
+        "interests": { "type": "array" },
+        "message": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fullName", "workEmail", "institutionName", "role", "institutionType", "teamSize", "academicContext", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/subscriptions/{subId}": {
+      "schema": "Subscription",
+      "description": "User subscription records."
+    },
+    "/payment_events/{eventId}": {
+      "schema": "PaymentEvent",
+      "description": "Records of billing and payment events."
+    },
+    "/history/{historyId}": {
+      "schema": "GradingHistory",
+      "description": "Main grading activity records."
+    },
+    "/student_records/{recordId}": {
+      "schema": "StudentRecord",
+      "description": "Individual student grading results."
+    },
+    "/files/{fileId}": {
+      "schema": "UploadedFile",
+      "description": "Metadata for user-uploaded files."
+    },
+    "/reports/{reportId}": {
+      "schema": "GradingReport",
+      "description": "Consolidated grading reports for history tracking."
+    },
+    "/enterprise_inquiries/{inquiryId}": {
+      "schema": "EnterpriseInquiry",
+      "description": "Inquiries from schools and institutions."
+    }
+  }
+}
