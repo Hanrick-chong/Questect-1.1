@@ -5,6 +5,8 @@ import {
   Image as ImageIcon, Cpu, FolderUp, Monitor, Camera, 
   HardDrive, Cloud, ChevronDown, BookOpen, Brain, Zap
 } from 'lucide-react';
+import { auth, db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { doc, getDoc, collection, addDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
 import { AI_CONFIG, getGeminiClient, getOpenAIClient } from '@/src/lib/ai-config';
 import ReactMarkdown from 'react-markdown';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -24,8 +26,8 @@ interface GraderProps {
 
 export default function Grader({ mode }: GraderProps) {
   const [input, setInput] = useState('');
-  const [image, setImage] = useState<string | null>(null);
-  const [studentFile, setStudentFile] = useState<File | null>(null);
+  const [images, setImages] = useState<string[]>([]);
+  const [studentFiles, setStudentFiles] = useState<File[]>([]);
   const [skema, setSkema] = useState('');
   const [skemaImage, setSkemaImage] = useState<string | null>(null);
   const [skemaFile, setSkemaFile] = useState<File | null>(null);
@@ -35,36 +37,37 @@ export default function Grader({ mode }: GraderProps) {
   const [result, setResult] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSkemaUploadModalOpen, setIsSkemaUploadModalOpen] = useState(false);
-  const [userSession, setUserSession] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const skemaFileInputRef = useRef<HTMLInputElement>(null);
   const skemaInputRef = useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
-    const sessionStr = localStorage.getItem(`${APP_NAME.toLowerCase()}_session`);
-    if (sessionStr) {
-      const session = JSON.parse(sessionStr);
-      setUserSession(session);
-      console.log(`[${APP_NAME} Backend] Active Session: ${session.uid} (${session.authMethod})`);
-    }
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setUserProfile(userDoc.data());
+        }
+
+        // Check for reportId in URL
+        const params = new URLSearchParams(window.location.search);
+        const reportId = params.get('reportId');
+        if (reportId) {
+          const reportDoc = await getDoc(doc(db, 'reports', reportId));
+          if (reportDoc.exists() && reportDoc.data().userId === user.uid) {
+            setResult(reportDoc.data().result);
+          }
+        }
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
-  const saveUserChoice = (choice: string) => {
-    if (userSession?.uid) {
-      console.log(`[${APP_NAME} Backend] RECORDING CHOICE: User [${userSession.uid}] selected [${choice}]`);
-      // Ready for Firebase: db.collection('users').doc(userSession.uid).update({ lastChoice: choice })
-    }
-  };
-
-  const handleExamLevelChange = (level: string) => {
-    setExamLevel(level);
-    saveUserChoice(level);
-  };
-
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
       const allowedTypes = [
         'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
         'application/pdf', 'text/plain',
@@ -72,56 +75,52 @@ export default function Grader({ mode }: GraderProps) {
         'application/msword'
       ];
 
-      if (!allowedTypes.includes(file.type) && !file.name.endsWith('.docx') && !file.name.endsWith('.doc')) {
-        setResult("Unsupported file type. Please upload an image (JPG, PNG), PDF, DOCX, or TXT file.");
-        setIsUploadModalOpen(false);
-        return;
-      }
+      for (const file of files) {
+        if (!allowedTypes.includes(file.type) && !file.name.endsWith('.docx') && !file.name.endsWith('.doc')) {
+          setResult(`Unsupported file type: ${file.name}. Please upload images, PDF, DOCX, or TXT.`);
+          continue;
+        }
 
-      setStudentFile(file);
+        setStudentFiles(prev => [...prev, file]);
 
-      if (file.type === 'text/plain') {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setInput(e.target?.result as string);
-          setIsUploadModalOpen(false);
-        };
-        reader.readAsText(file);
-      } else if (file.type === 'application/pdf') {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          let fullText = "";
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map((item: any) => item.str).join(" ");
-            fullText += pageText + "\n";
+        if (file.type === 'text/plain') {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            setInput(prev => prev + "\n" + (e.target?.result as string));
+          };
+          reader.readAsText(file);
+        } else if (file.type === 'application/pdf') {
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map((item: any) => item.str).join(" ");
+              fullText += pageText + "\n";
+            }
+            setInput(prev => prev + "\n" + fullText);
+          } catch (err) {
+            console.error("PDF Extraction Error:", err);
           }
-          setInput(prev => prev + "\n" + fullText);
-          setIsUploadModalOpen(false);
-        } catch (err) {
-          console.error("PDF Extraction Error:", err);
-          setResult("Failed to extract text from PDF.");
+        } else if (file.type.includes('officedocument.wordprocessingml.document') || file.name.endsWith('.docx')) {
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            setInput(prev => prev + "\n" + result.value);
+          } catch (err) {
+            console.error("DOCX Extraction Error:", err);
+          }
+        } else {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setImages(prev => [...prev, reader.result as string]);
+          };
+          reader.readAsDataURL(file);
         }
-      } else if (file.type.includes('officedocument.wordprocessingml.document') || file.name.endsWith('.docx')) {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          setInput(prev => prev + "\n" + result.value);
-          setIsUploadModalOpen(false);
-        } catch (err) {
-          console.error("DOCX Extraction Error:", err);
-          setResult("Failed to extract text from DOCX.");
-        }
-      } else {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImage(reader.result as string);
-          setIsUploadModalOpen(false);
-        };
-        reader.readAsDataURL(file);
       }
+      setIsUploadModalOpen(false);
     }
   };
 
@@ -189,8 +188,19 @@ export default function Grader({ mode }: GraderProps) {
   };
 
   const runGrading = async () => {
-    if (!input && !image) return;
+    if (!input && images.length === 0) return;
     
+    // Check usage limits for free users in Exam mode
+    if (mode === 'exam' && userProfile?.plan === 'free') {
+      const today = new Date().toISOString().split('T')[0];
+      if (userProfile.lastTrialResetDate !== today) {
+        // Reset trials for the new day (this should ideally be handled in a cloud function or on login)
+      } else if (userProfile.examGraderTrialsUsedToday >= 5) {
+        setResult("You have reached your daily limit of 5 Exam Grader trials. Please upgrade to Starter for unlimited access.");
+        return;
+      }
+    }
+
     setIsGrading(true);
     setResult(null);
     setGradingStage('Parsing Content...');
@@ -203,34 +213,35 @@ export default function Grader({ mode }: GraderProps) {
         Extract all text from the student work and marking scheme.
         Identify each question and the student's answer for that question.
         
+        CRITICAL: 
+        - If images are blurry, use your advanced vision capabilities to infer the text accurately.
+        - If the layout is complex (e.g., tables, columns), maintain the logical structure.
+        - If multiple students are present, separate them clearly.
+        
         Format your output as a clean JSON object:
         {
           "questions": [
-            { "id": 1, "text": "...", "studentAnswer": "..." },
+            { "id": 1, "text": "...", "studentAnswer": "...", "studentName": "Optional" },
             ...
           ],
-          "skema": "..."
+          "skema": "...",
+          "analysisType": "${mode === 'quick' ? 'Quick Feedback' : 'Full Exam Analysis'}"
         }
       `;
 
       const parseParts: any[] = [];
       
-      // INPUT BRANCHING LOGIC
-      // 1. Handle Student Work
-      if (image && studentFile) {
-        // ONLY send as inlineData if it's a true image
-        const isImage = studentFile.type.startsWith('image/');
-        if (isImage) {
-          parseParts.push({ 
-            inlineData: { 
-              data: image.split(',')[1], 
-              mimeType: studentFile.type 
-            } 
-          });
-        }
-      }
+      // Handle Student Work Images
+      images.forEach((img) => {
+        parseParts.push({ 
+          inlineData: { 
+            data: img.split(',')[1], 
+            mimeType: 'image/jpeg' 
+          } 
+        });
+      });
 
-      // 2. Handle Marking Scheme
+      // Handle Marking Scheme Image
       if (skemaImage && skemaFile) {
         const isImage = skemaFile.type.startsWith('image/');
         if (isImage) {
@@ -243,8 +254,7 @@ export default function Grader({ mode }: GraderProps) {
         }
       }
 
-      // 3. Handle Text (Pasted or Extracted)
-      // Always included if present. Text is safe.
+      // Handle Text (Pasted or Extracted)
       parseParts.push({ text: `Student Input Content: ${input}\n\nMarking Scheme Content: ${skema}\n\n${parsePrompt}` });
 
       const parseResponse = await gemini.models.generateContent({
@@ -256,23 +266,23 @@ export default function Grader({ mode }: GraderProps) {
       const parsedData = JSON.parse(parseResponse.text || '{}');
       
       // STAGE 2: PER-QUESTION GRADING (OpenAI GPT-4o)
-      // OpenAI is faster and more precise for structured grading logic.
       setGradingStage('Grading Questions...');
       
       const gradingPrompt = `
         You are ${APP_NAME} AI, a professional grader for ${examLevel} standards.
         Grade the following questions based on the provided marking scheme.
         
+        MODE: ${mode === 'quick' ? 'QUICK GRADING (Focus on immediate feedback and score)' : 'EXAM GRADER (Focus on academic rigor, marking scheme adherence, and detailed weakness analysis)'}
         SYLLABUS: ${examLevel}
         MARKING SCHEME: ${parsedData.skema || skema}
         
         QUESTIONS TO GRADE:
         ${JSON.stringify(parsedData.questions, null, 2)}
         
-        For each question, provide:
-        - Score
-        - Annotated Correction
-        - Weakness Analysis
+        SPECIFIC INSTRUCTIONS:
+        - For Essays (Long/Short/Functional): Evaluate based on content, language, and organization as per ${examLevel} rubrics.
+        - For Science/Math: Check for step-by-step accuracy and correct units.
+        - For Multiple Students: Provide a summary table first, then individual breakdowns.
         
         Output the final report in professional Markdown with PURE BOLD WHITE text structure.
       `;
@@ -286,7 +296,31 @@ export default function Grader({ mode }: GraderProps) {
         temperature: 0.3
       });
 
-      setResult(gradingResponse.choices[0].message.content || "No feedback generated.");
+      const finalResult = gradingResponse.choices[0].message.content || "No feedback generated.";
+      setResult(finalResult);
+
+      // STAGE 3: SAVE TO HISTORY (Firebase)
+      if (auth.currentUser) {
+        const reportsPath = `reports`;
+        await addDoc(collection(db, 'reports'), {
+          userId: auth.currentUser.uid,
+          mode,
+          examLevel,
+          timestamp: serverTimestamp(),
+          result: finalResult,
+          studentCount: parsedData.questions.length > 0 ? [...new Set(parsedData.questions.map((q: any) => q.studentName))].length : 1,
+          subject: examLevel, // Using examLevel as subject for now
+          studentName: parsedData.questions.length > 0 ? parsedData.questions[0].studentName : "Student",
+          academicLevel: examLevel
+        }).catch(err => handleFirestoreError(err, OperationType.WRITE, reportsPath));
+
+        // Update trial count for free users
+        if (mode === 'exam' && userProfile?.plan === 'free') {
+          await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+            examGraderTrialsUsedToday: increment(1)
+          });
+        }
+      }
     } catch (error) {
       console.error(error);
       setResult("Error during grading. Please check your API key or input.");
@@ -294,6 +328,10 @@ export default function Grader({ mode }: GraderProps) {
       setIsGrading(false);
       setGradingStage(null);
     }
+  };
+
+  const handleExamLevelChange = (level: string) => {
+    setExamLevel(level);
   };
 
   const examLevels = ['SPM', 'UEC', 'IGCSE', 'A-Level', 'Primary (SK/SRJK)'];
@@ -308,9 +346,9 @@ export default function Grader({ mode }: GraderProps) {
         
         {/* Header */}
         <div className="text-center mb-4 relative">
-          {userSession && (
+          {userProfile && (
             <div className="absolute top-0 right-0 text-[10px] font-black text-electric-cyan uppercase tracking-widest opacity-50 hidden md:block">
-              ID: {userSession.uid}
+              ID: {userProfile.uid}
             </div>
           )}
           <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">{APP_NAME}-A (Analyze)</h2>
@@ -348,7 +386,7 @@ export default function Grader({ mode }: GraderProps) {
                   <div className="space-y-3">
                     <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">UPLOAD STUDENT WORK</p>
                     <div className="flex-grow flex flex-col gap-6">
-                      {!image && !input && (
+                      {images.length === 0 && !input && (
                         <div className="flex-grow flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-3xl p-12 text-center group hover:border-electric-purple/30 transition-colors">
                           <button 
                             onClick={() => setIsUploadModalOpen(true)}
@@ -365,14 +403,25 @@ export default function Grader({ mode }: GraderProps) {
                         </div>
                       )}
 
-                      {image && (
-                        <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-2xl">
-                          <img src={image} alt="Student work" className="max-h-60 mx-auto object-contain" />
+                      {images.length > 0 && (
+                        <div className="grid grid-cols-2 gap-4">
+                          {images.map((img, idx) => (
+                            <div key={idx} className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-2xl h-40">
+                              <img src={img} alt={`Student work ${idx + 1}`} className="h-full w-full object-contain" />
+                              <button 
+                                onClick={() => setImages(prev => prev.filter((_, i) => i !== idx))}
+                                className="absolute top-2 right-2 bg-red-500/20 hover:bg-red-500 text-white p-1 rounded-lg transition-all"
+                              >
+                                <XCircle size={16} />
+                              </button>
+                            </div>
+                          ))}
                           <button 
-                            onClick={() => setImage(null)}
-                            className="absolute top-4 right-4 bg-red-500/20 hover:bg-red-500 text-white p-2 rounded-xl transition-all"
+                            onClick={() => setIsUploadModalOpen(true)}
+                            className="flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-2xl p-4 hover:border-electric-purple/30 transition-colors h-40"
                           >
-                            <XCircle size={20} />
+                            <FolderUp size={24} className="text-electric-purple mb-2" />
+                            <span className="text-[8px] font-black uppercase tracking-widest text-white/40">Add More</span>
                           </button>
                         </div>
                       )}
@@ -443,7 +492,7 @@ export default function Grader({ mode }: GraderProps) {
 
                   <button 
                     onClick={runGrading}
-                    disabled={isGrading || (!input && !image)}
+                    disabled={isGrading || (!input && images.length === 0)}
                     className="btn-primary py-5 px-8 rounded-2xl flex items-center justify-center gap-4 disabled:opacity-50 shadow-2xl group"
                   >
                     {isGrading ? <Loader2 className="animate-spin" size={24} /> : <Zap size={24} />}
@@ -488,7 +537,8 @@ export default function Grader({ mode }: GraderProps) {
                       <div className="flex justify-center pt-6 border-t border-white/10">
                         <button 
                           onClick={() => {
-                            setImage(null);
+                            setImages([]);
+                            setStudentFiles([]);
                             setInput('');
                             setResult(null);
                             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -552,18 +602,6 @@ export default function Grader({ mode }: GraderProps) {
                     </div>
                     <span className="font-black uppercase tracking-widest text-sm">Smart Scan</span>
                   </button>
-                  <button className="glass-card p-8 flex flex-col items-center gap-6 opacity-40 cursor-not-allowed group border border-white/5 rounded-3xl grayscale">
-                    <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center">
-                      <HardDrive size={40} className="text-white/20" />
-                    </div>
-                    <span className="font-black uppercase tracking-widest text-sm text-white/20">Google Drive</span>
-                  </button>
-                  <button className="glass-card p-8 flex flex-col items-center gap-6 opacity-40 cursor-not-allowed group border border-white/5 rounded-3xl grayscale">
-                    <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center">
-                      <Cloud size={40} className="text-white/20" />
-                    </div>
-                    <span className="font-black uppercase tracking-widest text-sm text-white/20">OneDrive</span>
-                  </button>
                 </div>
               </div>
 
@@ -571,6 +609,7 @@ export default function Grader({ mode }: GraderProps) {
                 type="file" 
                 ref={fileInputRef} 
                 className="hidden" 
+                multiple
                 accept="image/*,application/pdf,.doc,.docx" 
                 onChange={handleImageUpload} 
               />

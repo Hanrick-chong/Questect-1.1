@@ -21,7 +21,7 @@ import {
   Lock
 } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, query, getDocs, limit, orderBy, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, getDocs, limit, orderBy, doc, onSnapshot, where } from 'firebase/firestore';
 import { APP_NAME, UserPlan, hasPlanAccess } from '../lib/constants';
 import { 
   BarChart, 
@@ -74,6 +74,8 @@ export default function Dashboard() {
     growth: 15.2
   });
 
+  const [recentReports, setRecentReports] = useState<any[]>([]);
+
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
       if (!user) {
@@ -85,17 +87,30 @@ export default function Dashboard() {
         if (doc.exists()) {
           const profile = doc.data() as UserProfile;
           setUserProfile(profile);
-          
-          // Dashboard is available for Starter and above, but with different modules
-          const allowedPlans = ['starter', 'pro', 'advanced', 'growth', 'enterprise'];
-          if (!allowedPlans.includes(profile.plan || 'free')) {
-            // Free users see the lock screen
-          }
         }
         setLoading(false);
       }, (err) => handleFirestoreError(err, OperationType.GET, `users/${user.uid}`));
 
-      return () => unsubscribeUser();
+      // Fetch recent reports
+      const q = query(
+        collection(db, 'reports'),
+        where('userId', '==', user.uid),
+        orderBy('timestamp', 'desc'),
+        limit(5)
+      );
+
+      const unsubscribeReports = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setRecentReports(data);
+      });
+
+      return () => {
+        unsubscribeUser();
+        unsubscribeReports();
+      };
     });
 
     return () => unsubscribeAuth();
@@ -288,16 +303,20 @@ export default function Dashboard() {
               {isProOrAbove ? 'Grading Archive' : 'Basic History'}
             </h3>
             <div className="space-y-3">
-              {[
-                { name: 'Physics Midterm', date: '2h ago' },
-                { name: 'History Quiz A', date: '5h ago' },
-                { name: 'Bio Lab Report', date: '1d ago' },
-              ].map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center p-2 rounded bg-white/5 border border-white/5">
-                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-tight">{item.name}</span>
-                  <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">{item.date}</span>
-                </div>
-              ))}
+              {recentReports.length > 0 ? (
+                recentReports.slice(0, 3).map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 rounded bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10" onClick={() => navigate(`/analyze?reportId=${item.id}`)}>
+                    <span className="text-[10px] font-bold text-white/60 uppercase tracking-tight truncate max-w-[120px]">
+                      {item.studentName || 'Student'}
+                    </span>
+                    <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">
+                      {item.timestamp?.toDate().toLocaleDateString()}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest text-center py-4">No recent audits</p>
+              )}
               
               {isProOrAbove ? (
                 <button onClick={() => navigate('/history')} className="w-full mt-2 py-2 text-[8px] font-black text-[#00FFFF] uppercase tracking-widest hover:underline">
