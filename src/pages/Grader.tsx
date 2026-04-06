@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, FileText, CheckCircle2, XCircle, Send, Loader2, 
   Image as ImageIcon, Cpu, FolderUp, Monitor, Camera, 
-  HardDrive, Cloud, ChevronDown, BookOpen, Brain, Zap
+  HardDrive, Cloud, ChevronDown, BookOpen, Brain, Zap,
+  AlertTriangle, Info, Edit3, Check, RefreshCw
 } from 'lucide-react';
 import { auth, db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
 import { doc, getDoc, collection, addDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
@@ -20,12 +21,16 @@ import { APP_NAME } from '@/src/lib/constants';
 const gemini = getGeminiClient();
 const openai = getOpenAIClient();
 
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
+
 interface GraderProps {
   mode: 'quick' | 'exam';
 }
 
 export default function Grader({ mode }: GraderProps) {
   const [input, setInput] = useState('');
+  const { t } = useLanguage();
   const [images, setImages] = useState<string[]>([]);
   const [studentFiles, setStudentFiles] = useState<File[]>([]);
   const [skema, setSkema] = useState('');
@@ -38,6 +43,13 @@ export default function Grader({ mode }: GraderProps) {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSkemaUploadModalOpen, setIsSkemaUploadModalOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+  
+  // OCR Reliability Layer States
+  const [ocrPreviewData, setOcrPreviewData] = useState<any>(null);
+  const [isOcrReviewing, setIsOcrReviewing] = useState(false);
+  const [scanWarnings, setScanWarnings] = useState<string[]>([]);
+  const [ocrConfidence, setOcrConfidence] = useState<'high' | 'medium' | 'low'>('high');
+  const [isValidating, setIsValidating] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const skemaFileInputRef = useRef<HTMLInputElement>(null);
@@ -187,102 +199,131 @@ export default function Grader({ mode }: GraderProps) {
     }
   };
 
-  const runGrading = async () => {
+  const runOCR = async () => {
     if (!input && images.length === 0) return;
     
+    setIsGrading(true);
+    setGradingStage('Validating Image Quality...');
+    setScanWarnings([]);
+    setOcrPreviewData(null);
+
+    try {
+      const flashModel = AI_CONFIG.GEMINI.FLASH_MODEL;
+      
+      // Step 1: Quality Validation & OCR Extraction
+      const ocrPrompt = `
+        You are an advanced OCR and Image Quality Auditor for ${APP_NAME}.
+        
+        TASK 1: Evaluate Image Quality
+        Check for: blur, low lighting, shadows, glare, perspective distortion, or incomplete framing.
+        If quality is poor, provide specific actionable advice for the teacher to retake the photo.
+        
+        TASK 2: Extract Content
+        Extract all text from the student work. Identify questions, student answers, and student names.
+        Maintain structure even if complex (tables, columns).
+        
+        TASK 3: Confidence Assessment
+        Rate your overall confidence in the extraction as "high", "medium", or "low".
+        List specific areas or questions where the text was hard to read.
+        
+        Format your output as a clean JSON object:
+        {
+          "qualityReport": {
+            "isSuitable": boolean,
+            "issues": ["blur", "shadows", etc],
+            "advice": ["Retake in brighter light", etc]
+          },
+          "extraction": {
+            "questions": [
+              { "id": 1, "text": "...", "studentAnswer": "...", "studentName": "..." }
+            ],
+            "skema": "..."
+          },
+          "confidence": "high" | "medium" | "low",
+          "uncertainSections": ["Question 2 answer is slightly blurry", etc]
+        }
+      `;
+
+      const parts: any[] = [];
+      images.forEach((img) => {
+        parts.push({ inlineData: { data: img.split(',')[1], mimeType: 'image/jpeg' } });
+      });
+      
+      if (skemaImage && skemaFile) {
+        parts.push({ inlineData: { data: skemaImage.split(',')[1], mimeType: skemaFile.type } });
+      }
+
+      parts.push({ text: `Student Input (Text): ${input}\n\nMarking Scheme (Text): ${skema}\n\n${ocrPrompt}` });
+
+      const response = await gemini.models.generateContent({
+        model: flashModel,
+        contents: { parts },
+        config: { responseMimeType: "application/json" }
+      });
+
+      const data = JSON.parse(response.text || '{}');
+      
+      // Handle Quality Warnings
+      const warnings: string[] = [];
+      if (data.qualityReport && !data.qualityReport.isSuitable) {
+        warnings.push(...data.qualityReport.advice);
+      }
+      if (data.confidence === 'low' || data.confidence === 'medium') {
+        warnings.push(`Low-confidence scan detected: ${data.uncertainSections?.join(', ') || 'Some text may be inaccurate.'}`);
+      }
+      
+      setScanWarnings(warnings);
+      setOcrConfidence(data.confidence || 'high');
+      setOcrPreviewData(data.extraction);
+      setIsOcrReviewing(true);
+      
+      // Log for debugging
+      console.log(`[OCR LOG] Confidence: ${data.confidence}, Quality: ${data.qualityReport?.isSuitable ? 'Pass' : 'Fail'}`);
+
+    } catch (error) {
+      console.error("OCR Error:", error);
+      setResult("OCR extraction failed. Please try again or check your image quality.");
+    } finally {
+      setIsGrading(false);
+      setGradingStage(null);
+    }
+  };
+
+  const runFinalGrading = async () => {
+    if (!ocrPreviewData) return;
+
     // Check usage limits for free users in Exam mode
     if (mode === 'exam' && userProfile?.plan === 'free') {
       const today = new Date().toISOString().split('T')[0];
       if (userProfile.lastTrialResetDate !== today) {
-        // Reset trials for the new day (this should ideally be handled in a cloud function or on login)
+        // Reset trials logic
       } else if (userProfile.examGraderTrialsUsedToday >= 5) {
         setResult("You have reached your daily limit of 5 Exam Grader trials. Please upgrade to Starter for unlimited access.");
+        setIsOcrReviewing(false);
         return;
       }
     }
 
     setIsGrading(true);
-    setResult(null);
-    setGradingStage('Parsing Content...');
+    setIsOcrReviewing(false);
+    setGradingStage('AI Grading in Progress...');
 
     try {
-      // STAGE 1: PARSING & STRUCTURE DETECTION (Gemini Flash)
-      const flashModel = AI_CONFIG.GEMINI.FLASH_MODEL;
-      const parsePrompt = `
-        You are an OCR and structure detection engine for ${APP_NAME}.
-        Extract all text from the student work and marking scheme.
-        Identify each question and the student's answer for that question.
-        
-        CRITICAL: 
-        - If images are blurry, use your advanced vision capabilities to infer the text accurately.
-        - If the layout is complex (e.g., tables, columns), maintain the logical structure.
-        - If multiple students are present, separate them clearly.
-        
-        Format your output as a clean JSON object:
-        {
-          "questions": [
-            { "id": 1, "text": "...", "studentAnswer": "...", "studentName": "Optional" },
-            ...
-          ],
-          "skema": "...",
-          "analysisType": "${mode === 'quick' ? 'Quick Feedback' : 'Full Exam Analysis'}"
-        }
-      `;
-
-      const parseParts: any[] = [];
-      
-      // Handle Student Work Images
-      images.forEach((img) => {
-        parseParts.push({ 
-          inlineData: { 
-            data: img.split(',')[1], 
-            mimeType: 'image/jpeg' 
-          } 
-        });
-      });
-
-      // Handle Marking Scheme Image
-      if (skemaImage && skemaFile) {
-        const isImage = skemaFile.type.startsWith('image/');
-        if (isImage) {
-          parseParts.push({ 
-            inlineData: { 
-              data: skemaImage.split(',')[1], 
-              mimeType: skemaFile.type 
-            } 
-          });
-        }
-      }
-
-      // Handle Text (Pasted or Extracted)
-      parseParts.push({ text: `Student Input Content: ${input}\n\nMarking Scheme Content: ${skema}\n\n${parsePrompt}` });
-
-      const parseResponse = await gemini.models.generateContent({
-        model: flashModel,
-        contents: { parts: parseParts },
-        config: { responseMimeType: "application/json" }
-      });
-
-      const parsedData = JSON.parse(parseResponse.text || '{}');
-      
-      // STAGE 2: PER-QUESTION GRADING (OpenAI GPT-4o)
-      setGradingStage('Grading Questions...');
-      
       const gradingPrompt = `
         You are ${APP_NAME} AI, a professional grader for ${examLevel} standards.
         Grade the following questions based on the provided marking scheme.
         
-        MODE: ${mode === 'quick' ? 'QUICK GRADING (Focus on immediate feedback and score)' : 'EXAM GRADER (Focus on academic rigor, marking scheme adherence, and detailed weakness analysis)'}
+        MODE: ${mode === 'quick' ? 'QUICK GRADING' : 'EXAM GRADER'}
         SYLLABUS: ${examLevel}
-        MARKING SCHEME: ${parsedData.skema || skema}
+        MARKING SCHEME: ${ocrPreviewData.skema || skema}
         
         QUESTIONS TO GRADE:
-        ${JSON.stringify(parsedData.questions, null, 2)}
+        ${JSON.stringify(ocrPreviewData.questions, null, 2)}
         
         SPECIFIC INSTRUCTIONS:
-        - For Essays (Long/Short/Functional): Evaluate based on content, language, and organization as per ${examLevel} rubrics.
-        - For Science/Math: Check for step-by-step accuracy and correct units.
-        - For Multiple Students: Provide a summary table first, then individual breakdowns.
+        - For Essays: Evaluate content, language, and organization.
+        - For Science/Math: Check step-by-step accuracy and units.
+        - For Multiple Students: Provide summary table + individual breakdowns.
         
         Output the final report in professional Markdown with PURE BOLD WHITE text structure.
       `;
@@ -299,7 +340,7 @@ export default function Grader({ mode }: GraderProps) {
       const finalResult = gradingResponse.choices[0].message.content || "No feedback generated.";
       setResult(finalResult);
 
-      // STAGE 3: SAVE TO HISTORY (Firebase)
+      // SAVE TO HISTORY
       if (auth.currentUser) {
         const reportsPath = `reports`;
         await addDoc(collection(db, 'reports'), {
@@ -308,13 +349,14 @@ export default function Grader({ mode }: GraderProps) {
           examLevel,
           timestamp: serverTimestamp(),
           result: finalResult,
-          studentCount: parsedData.questions.length > 0 ? [...new Set(parsedData.questions.map((q: any) => q.studentName))].length : 1,
-          subject: examLevel, // Using examLevel as subject for now
-          studentName: parsedData.questions.length > 0 ? parsedData.questions[0].studentName : "Student",
-          academicLevel: examLevel
+          studentCount: ocrPreviewData.questions.length > 0 ? [...new Set(ocrPreviewData.questions.map((q: any) => q.studentName))].length : 1,
+          subject: examLevel,
+          studentName: ocrPreviewData.questions.length > 0 ? ocrPreviewData.questions[0].studentName : "Student",
+          academicLevel: examLevel,
+          ocrConfidence,
+          hadWarnings: scanWarnings.length > 0
         }).catch(err => handleFirestoreError(err, OperationType.WRITE, reportsPath));
 
-        // Update trial count for free users
         if (mode === 'exam' && userProfile?.plan === 'free') {
           await updateDoc(doc(db, 'users', auth.currentUser.uid), {
             examGraderTrialsUsedToday: increment(1)
@@ -322,8 +364,8 @@ export default function Grader({ mode }: GraderProps) {
         }
       }
     } catch (error) {
-      console.error(error);
-      setResult("Error during grading. Please check your API key or input.");
+      console.error("Grading Error:", error);
+      setResult("Error during grading. Please try again.");
     } finally {
       setIsGrading(false);
       setGradingStage(null);
@@ -345,14 +387,16 @@ export default function Grader({ mode }: GraderProps) {
       <div className="max-w-7xl mx-auto w-full flex-grow flex flex-col gap-8 relative z-10">
         
         {/* Header */}
-        <div className="text-center mb-4 relative">
-          {userProfile && (
-            <div className="absolute top-0 right-0 text-[10px] font-black text-electric-cyan uppercase tracking-widest opacity-50 hidden md:block">
-              ID: {userProfile.uid}
-            </div>
-          )}
-          <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">{APP_NAME}-A (Analyze)</h2>
-          <p className="text-electric-cyan font-black uppercase tracking-[0.3em] text-sm">Full Page / Multi-Question Grader</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-4 relative">
+          <div>
+            <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">
+              {mode === 'quick' ? t('mod_quick_grading') : t('mod_exam_grader')}
+            </h2>
+            <p className="text-electric-cyan font-black uppercase tracking-[0.3em] text-sm">
+              {mode === 'quick' ? 'Instant Feedback Node' : 'Batch Examination Processor'}
+            </p>
+          </div>
+          <LanguageSwitcher />
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8 flex-grow">
@@ -491,13 +535,13 @@ export default function Grader({ mode }: GraderProps) {
                   </div>
 
                   <button 
-                    onClick={runGrading}
+                    onClick={runOCR}
                     disabled={isGrading || (!input && images.length === 0)}
                     className="btn-primary py-5 px-8 rounded-2xl flex items-center justify-center gap-4 disabled:opacity-50 shadow-2xl group"
                   >
                     {isGrading ? <Loader2 className="animate-spin" size={24} /> : <Zap size={24} />}
                     <span className="font-black uppercase tracking-[0.2em] text-lg text-white">
-                      {isGrading ? "Analyzing..." : "Launch Analysis"}
+                      {isGrading ? t('common_loading') : t('grader_launch_smart_scan')}
                     </span>
                   </button>
                 </div>
@@ -505,6 +549,116 @@ export default function Grader({ mode }: GraderProps) {
             </div>
           </div>
         </div>
+
+        {/* OCR REVIEW & RELIABILITY LAYER */}
+        <AnimatePresence>
+          {isOcrReviewing && ocrPreviewData && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-[150] flex items-center justify-center p-6"
+            >
+              <div className="absolute inset-0 bg-oxford-blue/98 backdrop-blur-xl" onClick={() => setIsOcrReviewing(false)} />
+              <div className="relative brand-gradient-border w-full max-w-4xl max-h-[90vh] flex flex-col glow-cyan">
+                <div className="glass-card p-8 flex flex-col h-full border border-white/10 overflow-hidden">
+                  
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-8">
+                    <div>
+                      <h2 className="text-3xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
+                        <CheckCircle2 className="text-electric-cyan" size={28} />
+                        Scan Review & Verification
+                      </h2>
+                      <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mt-1">
+                        Verify extracted content before final AI grading
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => setIsOcrReviewing(false)}
+                      className="text-white/20 hover:text-white transition-colors"
+                    >
+                      <XCircle size={24} />
+                    </button>
+                  </div>
+
+                  {/* Reliability Warnings */}
+                  {scanWarnings.length > 0 && (
+                    <div className="mb-8 space-y-3">
+                      {scanWarnings.map((warning, idx) => (
+                        <div key={idx} className="flex items-center gap-3 p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-orange-400">
+                          <AlertTriangle size={18} className="shrink-0" />
+                          <p className="text-xs font-bold tracking-wide">{warning}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Confidence Indicator */}
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full">
+                      <div className={cn(
+                        "w-2 h-2 rounded-full animate-pulse",
+                        ocrConfidence === 'high' ? "bg-green-500" : ocrConfidence === 'medium' ? "bg-orange-500" : "bg-red-500"
+                      )} />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-white/60">
+                        OCR Confidence: {ocrConfidence}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/20">
+                      <Info size={12} />
+                      Review text below for accuracy
+                    </div>
+                  </div>
+
+                  {/* Extracted Content Preview */}
+                  <div className="flex-grow overflow-y-auto custom-scrollbar pr-4 mb-8">
+                    <div className="space-y-6">
+                      {ocrPreviewData.questions.map((q: any, idx: number) => (
+                        <div key={idx} className="p-6 bg-white/5 border border-white/10 rounded-2xl group hover:border-electric-cyan/30 transition-all">
+                          <div className="flex justify-between items-start mb-4">
+                            <span className="text-[10px] font-black text-electric-cyan uppercase tracking-widest">Question {q.id}</span>
+                            <Edit3 size={14} className="text-white/10 group-hover:text-white/40 transition-colors" />
+                          </div>
+                          <div className="space-y-4">
+                            <div>
+                              <p className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Extracted Question Text</p>
+                              <p className="text-sm text-white/80 font-medium leading-relaxed">{q.text}</p>
+                            </div>
+                            <div>
+                              <p className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Student Answer</p>
+                              <p className="text-sm text-white font-bold leading-relaxed">{q.studentAnswer}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-4 pt-6 border-t border-white/10">
+                    <button 
+                      onClick={() => setIsOcrReviewing(false)}
+                      className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw size={14} />
+                      Retake / Edit Scan
+                    </button>
+                    <button 
+                      onClick={runFinalGrading}
+                      disabled={isGrading}
+                      className="flex-[2] py-4 bg-electric-cyan text-oxford-blue rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(0,255,255,0.3)]"
+                    >
+                      {isGrading ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
+                      Confirm & Start AI Grading
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* AI DIAGNOSIS ROOM (Results) */}
         <AnimatePresence>
@@ -594,13 +748,16 @@ export default function Grader({ mode }: GraderProps) {
                     <div className="w-20 h-20 bg-electric-purple/10 rounded-2xl flex items-center justify-center group-hover:bg-electric-purple/20 transition-colors">
                       <Monitor size={40} className="text-electric-purple group-hover:scale-110 transition-transform" />
                     </div>
-                    <span className="font-black uppercase tracking-widest text-sm">My Device</span>
+                    <span className="font-black uppercase tracking-widest text-sm">{t('grader_my_device')}</span>
                   </button>
-                  <button className="glass-card p-8 flex flex-col items-center gap-6 hover:bg-white/10 transition-all group border border-white/5 rounded-3xl">
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="glass-card p-8 flex flex-col items-center gap-6 hover:bg-white/10 transition-all group border border-white/5 rounded-3xl"
+                  >
                     <div className="w-20 h-20 bg-electric-purple/10 rounded-2xl flex items-center justify-center group-hover:bg-electric-purple/20 transition-colors">
                       <Camera size={40} className="text-electric-purple group-hover:scale-110 transition-transform" />
                     </div>
-                    <span className="font-black uppercase tracking-widest text-sm">Smart Scan</span>
+                    <span className="font-black uppercase tracking-widest text-sm">{t('grader_smart_scan')}</span>
                   </button>
                 </div>
               </div>
@@ -654,13 +811,16 @@ export default function Grader({ mode }: GraderProps) {
                     <div className="w-20 h-20 bg-electric-cyan/10 rounded-2xl flex items-center justify-center group-hover:bg-electric-cyan/20 transition-colors">
                       <Monitor size={40} className="text-electric-cyan group-hover:scale-110 transition-transform" />
                     </div>
-                    <span className="font-black uppercase tracking-widest text-sm">My Device</span>
+                    <span className="font-black uppercase tracking-widest text-sm">{t('grader_my_device')}</span>
                   </button>
-                  <button className="glass-card p-8 flex flex-col items-center gap-6 hover:bg-white/10 transition-all group border border-white/5 rounded-3xl">
+                  <button 
+                    onClick={() => skemaFileInputRef.current?.click()}
+                    className="glass-card p-8 flex flex-col items-center gap-6 hover:bg-white/10 transition-all group border border-white/5 rounded-3xl"
+                  >
                     <div className="w-20 h-20 bg-electric-cyan/10 rounded-2xl flex items-center justify-center group-hover:bg-electric-cyan/20 transition-colors">
                       <Camera size={40} className="text-electric-cyan group-hover:scale-110 transition-transform" />
                     </div>
-                    <span className="font-black uppercase tracking-widest text-sm">Smart Scan</span>
+                    <span className="font-black uppercase tracking-widest text-sm">{t('grader_smart_scan')}</span>
                   </button>
                   <button className="glass-card p-8 flex flex-col items-center gap-6 opacity-40 cursor-not-allowed group border border-white/5 rounded-3xl grayscale">
                     <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center">

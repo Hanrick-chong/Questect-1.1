@@ -63,8 +63,12 @@ const PERFORMANCE_DATA = [
 
 const COLORS = ['#00F0FF', '#7000FF', '#FF00A8', '#FFB800', '#FF4D4D'];
 
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState({
@@ -129,7 +133,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-[#001220] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Activity className="text-[#00FFFF] animate-pulse" size={40} />
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">Initializing Infrastructure...</p>
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">{t('common_loading')}</p>
         </div>
       </div>
     );
@@ -144,17 +148,17 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto relative z-10">
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
           <div>
             <button 
               onClick={() => navigate('/analyze')}
               className="flex items-center gap-2 text-white/40 hover:text-white text-[10px] font-black uppercase tracking-widest mb-4 transition-colors"
             >
-              <ArrowLeft size={14} /> Back to Workspace
+              <ArrowLeft size={14} /> {t('dash_back_workspace')}
             </button>
             <h1 className="text-4xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
               <LayoutGrid className="text-[#00FFFF]" size={32} />
-              {isInstitutional ? 'Institution Control' : 'Questect Dashboard'}
+              {isInstitutional ? t('dash_inst_title') : t('dash_title')}
             </h1>
             <div className="flex items-center gap-3 mt-2">
               <span className={cn(
@@ -165,7 +169,7 @@ export default function Dashboard() {
                 plan === 'advanced' && "bg-[#00FFFF]/10 border-[#00FFFF]/30 text-[#00FFFF]",
                 isInstitutional && "bg-[#8A2BE2]/10 border-[#8A2BE2]/30 text-[#8A2BE2]"
               )}>
-                {plan} tier
+                {plan} {t('dash_tier')}
               </span>
               <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.4em]">
                 {plan === 'free' && 'Basic Access Node'}
@@ -180,15 +184,20 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             {isStarterOrAbove && (
               <button className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white transition-all flex items-center gap-2">
-                <Calendar size={14} /> Last 30 Days
+                <Calendar size={14} /> {t('dash_last_30')}
               </button>
             )}
             {isProOrAbove && (
               <button className="px-6 py-3 bg-[#00FFFF] text-[#001220] rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2">
-                <Download size={14} /> Export Report
+                <Download size={14} /> {t('dash_export')}
               </button>
             )}
           </div>
+        </div>
+
+        {/* Language Switcher Row - Specifically below Dashboard title */}
+        <div className="flex justify-end mb-8">
+          <LanguageSwitcher />
         </div>
 
         {/* Module Grid */}
@@ -201,18 +210,18 @@ export default function Dashboard() {
             </div>
             <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
               <Zap size={16} className="text-[#00FFFF]" />
-              Quick Grading
+              {t('mod_quick_grading')}
             </h3>
             <div className="space-y-4">
               <div className="flex justify-between items-end">
                 <div>
-                  <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Today's Audits</p>
+                  <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">{t('label_today_audits')}</p>
                   <h4 className="text-3xl font-black text-white tracking-tighter">24</h4>
                 </div>
                 <span className="text-[10px] font-black text-green-400 uppercase tracking-widest">+12%</span>
               </div>
               <button onClick={() => navigate('/grader/quick')} className="w-full py-3 bg-white/5 border border-white/10 rounded-lg text-[8px] font-black uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-all">
-                Open Quick Grader
+                {t('btn_open_quick')}
               </button>
             </div>
           </div>
@@ -224,7 +233,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
               <FileText size={16} className="text-[#8A2BE2]" />
-              Exam Grader
+              {t('mod_exam_grader')}
             </h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -233,7 +242,7 @@ export default function Dashboard() {
                   "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest",
                   isStarterOrAbove ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
                 )}>
-                  {isStarterOrAbove ? 'Full Access' : 'Limited Access'}
+                  {isStarterOrAbove ? t('status_full_access') : t('status_limited_access')}
                 </span>
               </div>
               <div className="h-1 bg-white/5 rounded-full overflow-hidden">
@@ -243,7 +252,7 @@ export default function Dashboard() {
                 {isStarterOrAbove ? 'Unlimited batch processing active' : '5 trials remaining for today'}
               </p>
               <button onClick={() => navigate('/grader/exam')} className="w-full py-3 bg-white/5 border border-white/10 rounded-lg text-[8px] font-black uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-all">
-                {isStarterOrAbove ? 'Launch Workspace' : 'Try Exam Grader'}
+                {isStarterOrAbove ? t('btn_launch_workspace') : t('btn_try_exam')}
               </button>
             </div>
           </div>
@@ -258,7 +267,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
               <Activity size={16} className="text-[#00FFFF]" />
-              Usage Panel
+              {t('mod_usage_panel')}
             </h3>
             
             {isStarterOrAbove ? (
@@ -300,7 +309,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
               <Clock size={16} className="text-purple-500" />
-              {isProOrAbove ? 'Grading Archive' : 'Basic History'}
+              {isProOrAbove ? t('mod_history_archive') : t('mod_basic_history')}
             </h3>
             <div className="space-y-3">
               {recentReports.length > 0 ? (
@@ -315,7 +324,7 @@ export default function Dashboard() {
                   </div>
                 ))
               ) : (
-                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest text-center py-4">No recent audits</p>
+                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest text-center py-4">{t('label_no_recent')}</p>
               )}
               
               {isProOrAbove ? (
@@ -343,7 +352,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
               <TrendingUp size={16} className="text-red-500" />
-              Performance Trends
+              {t('mod_analytics')}
             </h3>
             
             {isAdvancedOrAbove ? (
@@ -386,7 +395,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
               <Users size={16} className="text-orange-500" />
-              Team Management
+              {t('mod_team')}
             </h3>
             
             {isInstitutional ? (

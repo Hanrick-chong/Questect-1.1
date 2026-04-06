@@ -5,9 +5,11 @@ import { cn } from '../lib/utils';
 import { auth } from '../lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { LogOut, Menu, X, ChevronRight, Share2, Check, Lock } from 'lucide-react';
+import { LogOut, Menu, X, ChevronRight, Share2, Check, Lock, Globe } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { APP_URL, APP_NAME } from '../lib/constants';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from './LanguageSwitcher';
 
 interface UserProfile {
   plan: string;
@@ -16,6 +18,7 @@ interface UserProfile {
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -64,9 +67,9 @@ export default function Navbar() {
   };
   
   const navLinks = [
-    { name: 'Features', path: '/features' },
-    { name: 'Pricing', path: '/pricing' },
-    { name: 'About Us', path: '/about' },
+    { name: t('nav_features'), path: '/features' },
+    { name: t('nav_pricing'), path: '/pricing' },
+    { name: t('nav_about'), path: '/about' },
   ];
 
   const plan = userProfile?.plan || 'free';
@@ -75,14 +78,14 @@ export default function Navbar() {
   const isGrowthOrAbove = ['growth', 'enterprise'].includes(plan);
 
   const mobileMenuLinks = [
-    { name: 'Quick Grading', path: '/analyze', authRequired: true },
-    { name: 'Exam Grader', path: '/system', authRequired: true },
-    { name: 'Dashboard', path: '/dashboard', authRequired: true, planRequired: isStarterOrAbove },
-    { name: 'History', path: '/history', authRequired: true, planRequired: isProOrAbove },
-    { name: 'Billing', path: '/billing', authRequired: true },
-    { name: 'Profile', path: '/billing', authRequired: true },
-    { name: 'Features', path: '/features' },
-    { name: 'About Us', path: '/about' },
+    { name: t('mod_quick_grading'), path: '/analyze', authRequired: true },
+    { name: t('mod_exam_grader'), path: '/system', authRequired: true },
+    { name: t('nav_dashboard'), path: '/dashboard', authRequired: true, planRequired: isStarterOrAbove },
+    { name: t('nav_history'), path: '/history', authRequired: true, planRequired: isProOrAbove },
+    { name: t('nav_billing'), path: '/billing', authRequired: true },
+    { name: t('nav_profile'), path: '/billing', authRequired: true },
+    { name: t('nav_features'), path: '/features' },
+    { name: t('nav_about'), path: '/about' },
   ];
 
   return (
@@ -115,7 +118,7 @@ export default function Navbar() {
             ) : (
               <Share2 size={14} className="group-hover:scale-110 transition-transform" />
             )}
-            {copied ? 'Copied!' : 'Share'}
+            {copied ? t('common_copied') : t('common_share')}
           </button>
           {navLinks.map((link) => (
             <Link
@@ -137,7 +140,7 @@ export default function Navbar() {
                 location.pathname === '/analyze' ? "text-electric-cyan" : "text-white/80"
               )}
             >
-              Workspace
+              {t('nav_workspace')}
             </Link>
           )}
           {user && isStarterOrAbove && (
@@ -148,7 +151,7 @@ export default function Navbar() {
                 location.pathname === '/dashboard' ? "text-electric-cyan" : "text-white/80"
               )}
             >
-              Dashboard
+              {t('nav_dashboard')}
             </Link>
           )}
           {user ? (
@@ -157,12 +160,12 @@ export default function Navbar() {
               className="flex items-center gap-2 text-white/60 hover:text-white transition-colors text-[10px] font-black uppercase tracking-widest"
             >
               <LogOut size={14} />
-              Sign Out
+              {t('nav_sign_out')}
             </button>
           ) : (
             <Link to="/auth" className="btn-primary py-2 px-6 text-sm group transition-all duration-300 hover:brightness-110">
               <span className="group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] transition-all duration-300">
-                Get Started
+                {t('nav_get_started')}
               </span>
             </Link>
           )}
@@ -177,7 +180,7 @@ export default function Navbar() {
               location.pathname === '/pricing' ? "text-electric-cyan" : "text-white/80"
             )}
           >
-            Pricing
+            {t('nav_pricing')}
           </Link>
           <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -229,7 +232,7 @@ export default function Navbar() {
                   to="/auth" 
                   className="btn-primary mt-4 py-4 rounded-xl text-center text-sm font-black uppercase tracking-widest"
                 >
-                  Get Started
+                  {t('nav_get_started')}
                 </Link>
               ) : (
                 <button 
@@ -237,9 +240,12 @@ export default function Navbar() {
                   className="flex items-center justify-center gap-2 mt-4 p-4 text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-widest border border-white/5 rounded-xl"
                 >
                   <LogOut size={16} />
-                  Sign Out
+                  {t('nav_sign_out')}
                 </button>
               )}
+              <div className="mt-4 pt-4 border-t border-white/5 flex justify-center">
+                <LanguageSwitcher />
+              </div>
             </div>
           </motion.div>
         )}

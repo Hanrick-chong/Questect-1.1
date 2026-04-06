@@ -5,9 +5,11 @@ import { ArrowRight, Zap, FileText, CheckCircle, Camera, FolderOpen } from 'luci
 import { auth } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { APP_NAME } from '../lib/constants';
+import { useLanguage } from '../lib/i18n';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [particles, setParticles] = useState<{ id: number; left: string; duration: string; delay: string }[]>([]);
 
   useEffect(() => {
@@ -67,12 +69,11 @@ export default function Home() {
             />
           </div>
           <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-tight">
-            Global Standards. <br />
-            <span className="text-transparent bg-clip-text brand-gradient-bg">Local Precision.</span>
+            {t('home_hero_title').split('.')[0]}. <br />
+            <span className="text-transparent bg-clip-text brand-gradient-bg">{t('home_hero_title').split('.')[1]}</span>
           </h1>
           <p className="text-lg md:text-xl text-white/60 max-w-3xl mx-auto mb-10 font-medium leading-relaxed tracking-tight">
-            The intelligent minimalist grading platform for modern educators. 
-            Empowering teachers with AI-driven insights and unparalleled efficiency.
+            {t('home_hero_subtitle')}
           </p>
 
           {/* Model Authority Section */}
@@ -95,10 +96,10 @@ export default function Home() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
             <Link to="/auth" className="btn-primary flex items-center gap-4 w-full sm:w-auto justify-center py-4 px-12 text-base">
-              Start Grading <ArrowRight size={20} />
+              {t('home_start_grading')} <ArrowRight size={20} />
             </Link>
             <Link to="/features" className="btn-secondary w-full sm:w-auto justify-center py-4 px-12 text-base">
-              Explore Features
+              {t('home_explore_features')}
             </Link>
           </div>
         </motion.div>
@@ -115,10 +116,10 @@ export default function Home() {
               <Zap className="text-electric-purple" size={20} />
             </div>
             <h3 className="text-xl font-black mb-1 text-white tracking-tight uppercase">{APP_NAME}-A (Analyze)</h3>
-            <p className="text-electric-cyan text-[11px] font-black mb-4 uppercase tracking-[0.2em]">Unlimited Full Page Grader</p>
+            <p className="text-electric-cyan text-[11px] font-black mb-4 uppercase tracking-[0.2em]">{t('home_analyze_title')}</p>
             
             <p className="text-white/70 font-bold mb-6 text-sm md:text-[15px] leading-relaxed tracking-tight flex-grow">
-              Upload as many photos or PDFs as you want. Our AI provides meticulous, question-by-question feedback for every page with zero limits and maximum efficiency.
+              {t('home_analyze_desc')}
             </p>
 
             <div className="flex flex-wrap gap-2 mb-8">
@@ -148,9 +149,9 @@ export default function Home() {
               <FileText className="text-electric-cyan" size={20} />
             </div>
             <h3 className="text-xl font-black mb-1 text-white tracking-tight uppercase">{APP_NAME}-S (System)</h3>
-            <p className="text-white/40 text-[11px] font-black mb-4 uppercase tracking-[0.2em]">Full Paper Examination System</p>
+            <p className="text-white/40 text-[11px] font-black mb-4 uppercase tracking-[0.2em]">{t('home_system_title')}</p>
             <p className="text-white/70 font-bold mb-6 text-sm md:text-[15px] leading-relaxed tracking-tight flex-grow">
-              Advanced support for multi-page uploads and high-complexity exam structures. Comprehensive grading for full-length papers, perfectly aligned with SPM, IGCSE, and more.
+              {t('home_system_desc')}
             </p>
             
             <div className="h-[26px] mb-8" /> {/* Spacer to align with badges in the left card */}
