@@ -18,6 +18,8 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { APP_NAME, APP_DOMAIN, LEGAL_URLS } from '@/src/lib/constants';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 declare global {
   interface Window {
@@ -45,6 +47,7 @@ const META_APP_ID = '2695895034108399';
 
 export default function Auth() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [authState, setAuthState] = useState<AuthState>('methods');
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('ROLE');
   const [authMethod, setAuthMethod] = useState<string>('');
@@ -319,7 +322,7 @@ export default function Auth() {
                   </svg>
                 </div>
                 <span className="font-black uppercase tracking-widest text-[11px] text-white">
-                  {isLoading ? 'Connecting...' : 'Continue with Google'}
+                  {isLoading ? t('common_loading') : t('auth_sign_in_google')}
                 </span>
               </button>
 
@@ -333,7 +336,7 @@ export default function Auth() {
                   <Facebook size={16} className="text-[#1877F2]" fill="currentColor" />
                 </div>
                 <span className="font-black uppercase tracking-widest text-[11px] text-white">
-                  {isLoading ? 'Connecting...' : 'Continue with Facebook'}
+                  {isLoading ? t('common_loading') : 'Continue with Facebook'}
                 </span>
               </button>
 
@@ -423,7 +426,7 @@ export default function Auth() {
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-[8px] font-black text-white uppercase tracking-[0.3em]">Email Address</p>
+                  <p className="text-[8px] font-black text-white uppercase tracking-[0.3em]">{t('auth_email_label')}</p>
                   <input
                     type="email"
                     value={emailInput}
@@ -439,7 +442,7 @@ export default function Auth() {
 
                 {isEmailLogin && (
                   <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <p className="text-[8px] font-black text-white uppercase tracking-[0.3em]">Password</p>
+                    <p className="text-[8px] font-black text-white uppercase tracking-[0.3em]">{t('auth_password_label')}</p>
                     <input
                       type="password"
                       value={password}
@@ -695,6 +698,9 @@ export default function Auth() {
         >
           <div className="brand-gradient-border glow-purple">
             <div className="glass-card p-4 md:p-5 flex flex-col items-center border border-white/5">
+              <div className="w-full flex justify-end mb-4">
+                <LanguageSwitcher />
+              </div>
               {/* Logo */}
               <div className="relative mb-2 shrink-0">
                 <div className="absolute inset-0 brand-gradient-bg blur-xl opacity-20 animate-pulse" />

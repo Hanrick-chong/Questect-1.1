@@ -7,6 +7,8 @@ import { APP_NAME, STRIPE_ACTIVATED, STRIPE_LINKS } from '../lib/constants';
 import { auth, db } from '../lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import PremiumUnavailableModal from '../components/Pricing/PremiumUnavailableModal';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 interface UserProfile {
   plan: string;
@@ -14,6 +16,7 @@ interface UserProfile {
 
 export default function Pricing() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [tier, setTier] = useState<'educator' | 'institution'>('educator');
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -215,8 +218,11 @@ export default function Pricing() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-16"
         >
-          <h2 className="text-5xl md:text-7xl font-black mb-4 tracking-tighter uppercase text-white">The Metabolism</h2>
-          <p className="text-white/40 text-lg font-black uppercase tracking-[0.4em] mb-10">{APP_NAME} Infrastructure Plans</p>
+          <div className="flex justify-end mb-8">
+            <LanguageSwitcher />
+          </div>
+          <h2 className="text-5xl md:text-7xl font-black mb-4 tracking-tighter uppercase text-white">{t('pricing_title')}</h2>
+          <p className="text-white/40 text-lg font-black uppercase tracking-[0.4em] mb-10">{t('pricing_subtitle')}</p>
           
           {user?.email === 'cbumsteak@gmail.com' && (
             <div className="mb-8">
@@ -237,7 +243,7 @@ export default function Pricing() {
                 tier === 'educator' ? "bg-gradient-to-r from-[#00FFFF] to-[#8A2BE2] text-[#001220] shadow-lg" : "text-white/40 hover:text-white"
               )}
             >
-              Individual Educator
+              {t('pricing_tier_educator')}
             </button>
             <button
               onClick={() => setTier('institution')}
@@ -246,7 +252,7 @@ export default function Pricing() {
                 tier === 'institution' ? "bg-gradient-to-r from-[#00FFFF] to-[#8A2BE2] text-[#001220] shadow-lg" : "text-white/40 hover:text-white"
               )}
             >
-              School Institution
+              {t('pricing_tier_institution')}
             </button>
           </div>
         </motion.div>
@@ -273,7 +279,7 @@ export default function Pricing() {
                 <div className="bg-white/[0.02] backdrop-blur-xl p-10 flex flex-col h-full">
                   {plan.featured && (
                     <div className="absolute top-0 right-0 bg-gradient-to-r from-[#00FFFF] to-[#8A2BE2] text-[#001220] text-[10px] font-black px-4 py-1.5 rounded-bl-xl uppercase tracking-widest shadow-lg">
-                      Popular
+                      {t('pricing_popular')}
                     </div>
                   )}
                   <div className="mb-10">
@@ -281,7 +287,7 @@ export default function Pricing() {
                     <h3 className="text-2xl font-black mb-2 text-[#00FFFF] tracking-tighter uppercase">{plan.name}</h3>
                     <div className="flex items-baseline gap-1">
                       <span className="text-5xl font-black text-white tracking-tighter">{plan.price}</span>
-                      {plan.price !== 'Custom' && <span className="text-white/30 text-sm font-bold uppercase tracking-widest">/mo</span>}
+                      {plan.price !== 'Custom' && <span className="text-white/30 text-sm font-bold uppercase tracking-widest">{t('pricing_per_month')}</span>}
                     </div>
                   </div>
                   <ul className="space-y-5 mb-10 flex-grow">
@@ -301,10 +307,10 @@ export default function Pricing() {
                       "bg-gradient-to-r from-[#00FFFF] to-[#8A2BE2] text-[#001220] hover:scale-[1.02] active:scale-[0.98]"
                     )}
                   >
-                    {isCurrent ? 'Current Plan' : 
-                     plan.name === 'Enterprise' ? 'Contact Sales' : 
-                     !STRIPE_ACTIVATED && plan.name !== 'Free' ? 'View Availability' :
-                     `Choose ${plan.name}`}
+                    {isCurrent ? t('pricing_current_plan') : 
+                     plan.name === 'Enterprise' ? t('pricing_contact_sales') : 
+                     !STRIPE_ACTIVATED && plan.name !== 'Free' ? t('pricing_view_availability') :
+                     t('pricing_choose_plan').replace('{plan}', plan.name)}
                   </button>
                 </div>
               </motion.div>

@@ -18,11 +18,14 @@ import {
   Clock,
   Zap,
   Crown,
-  Lock
+  Lock,
+  Ticket,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
-import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType, applyInvitationCode, isTeacherPilotActive } from '../lib/firebase';
 import { collection, query, getDocs, limit, orderBy, doc, onSnapshot, where } from 'firebase/firestore';
-import { APP_NAME, UserPlan, hasPlanAccess } from '../lib/constants';
+import { APP_NAME, UserPlan, hasPlanAccess, hasPilotFeatureAccess } from '../lib/constants';
 import { 
   BarChart, 
   Bar, 
@@ -41,6 +44,13 @@ import { cn } from '../lib/utils';
 
 interface UserProfile {
   plan: string;
+  teacherPilotAccess?: boolean;
+  teacherPilotStartDate?: string;
+  teacherPilotEndDate?: string;
+  teacherPilotDailyLimit?: number;
+  teacherPilotDailyUsage?: number;
+  teacherPilotLastUsageDate?: string;
+  teacherPilotUnlockedFeatures?: string[];
 }
 
 const MOCK_DATA = [
@@ -71,6 +81,10 @@ export default function Dashboard() {
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [invitationCode, setInvitationCode] = useState('');
+  const [applyingCode, setApplyingCode] = useState(false);
+  const [pilotError, setPilotError] = useState('');
+  const [pilotSuccess, setPilotSuccess] = useState('');
   const [stats, setStats] = useState({
     totalGraded: 1240,
     activeTeachers: 12,
@@ -120,10 +134,29 @@ export default function Dashboard() {
     return () => unsubscribeAuth();
   }, [navigate]);
 
+  const handleApplyCode = async () => {
+    if (!invitationCode.trim() || !auth.currentUser) return;
+    
+    setApplyingCode(true);
+    setPilotError('');
+    setPilotSuccess('');
+    
+    try {
+      await applyInvitationCode(invitationCode.trim(), auth.currentUser.uid);
+      setPilotSuccess(t('pilot_success'));
+      setInvitationCode('');
+    } catch (err: any) {
+      setPilotError(t(err.message));
+    } finally {
+      setApplyingCode(false);
+    }
+  };
+
   const plan = (userProfile?.plan as UserPlan) || 'free';
+  const isPilotActive = isTeacherPilotActive(userProfile);
   const isStarterOrAbove = hasPlanAccess(plan, 'starter');
-  const isProOrAbove = hasPlanAccess(plan, 'pro');
-  const isAdvancedOrAbove = hasPlanAccess(plan, 'advanced');
+  const isProOrAbove = hasPlanAccess(plan, 'pro') || isPilotActive;
+  const isAdvancedOrAbove = hasPlanAccess(plan, 'advanced') || hasPilotFeatureAccess(userProfile, 'premium_dashboard');
   const isGrowthOrAbove = hasPlanAccess(plan, 'growth');
   const isEnterprise = plan === 'enterprise';
   const isInstitutional = isGrowthOrAbove || isEnterprise;
@@ -172,11 +205,11 @@ export default function Dashboard() {
                 {plan} {t('dash_tier')}
               </span>
               <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.4em]">
-                {plan === 'free' && 'Basic Access Node'}
-                {plan === 'starter' && 'Starter Data Center'}
-                {plan === 'pro' && 'Pro Analytics Engine'}
-                {plan === 'advanced' && 'Advanced Predictive Dashboard'}
-                {isInstitutional && 'Institutional Analytics Engine'}
+                {plan === 'free' && t('dash_plan_free')}
+                {plan === 'starter' && t('dash_plan_starter')}
+                {plan === 'pro' && t('dash_plan_pro')}
+                {plan === 'advanced' && t('dash_plan_advanced')}
+                {isInstitutional && t('dash_plan_inst')}
               </p>
             </div>
           </div>
@@ -199,6 +232,86 @@ export default function Dashboard() {
         <div className="flex justify-end mb-8">
           <LanguageSwitcher />
         </div>
+
+        {/* Pilot Access Status Section (ONLY for active pilot users) */}
+        {isPilotActive && (
+          <div className="mb-12">
+            <div className="glass-card p-8 border border-[#00FFFF]/20 relative overflow-hidden bg-gradient-to-br from-[#00FFFF]/5 to-transparent">
+              <div className="absolute top-0 right-0 p-8 opacity-5 text-[#00FFFF]">
+                <Crown size={80} />
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-[#00FFFF]/10 flex items-center justify-center border border-[#00FFFF]/20">
+                      <Crown size={24} className="text-[#00FFFF]" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-white uppercase tracking-widest leading-none">
+                        {t('pilot_title')}
+                      </h2>
+                      <p className="text-[#00FFFF] text-[10px] font-black uppercase tracking-[0.4em] mt-2 flex items-center gap-2">
+                        <CheckCircle2 size={12} /> {t('pilot_status_active')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                      <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">{t('pilot_end_date')}</p>
+                      <p className="text-sm font-black text-white uppercase tracking-widest">
+                        {new Date(userProfile?.teacherPilotEndDate || '').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                      <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">{t('pilot_remaining_days')}</p>
+                      <p className="text-sm font-black text-[#00FFFF] uppercase tracking-widest">
+                        {Math.max(0, Math.ceil((new Date(userProfile?.teacherPilotEndDate || '').getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} {t('pilot_days')}
+                      </p>
+                    </div>
+                    <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                      <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">{t('pilot_daily_usage')}</p>
+                      <p className="text-sm font-black text-white uppercase tracking-widest">
+                        {userProfile?.teacherPilotDailyUsage || 0} / {userProfile?.teacherPilotDailyLimit || 20} {t('pilot_uses_today')}
+                      </p>
+                    </div>
+                    <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
+                      <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">{t('pilot_premium_unlocked')}</p>
+                      <p className="text-xs font-black text-green-400 uppercase tracking-widest flex items-center gap-2">
+                        <Zap size={14} /> {t('pilot_unlocked')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="hidden lg:block border-l border-white/5 pl-12">
+                  <p className="text-[11px] font-black text-white/40 uppercase tracking-widest mb-6">{t('pilot_privileges')}</p>
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 h-8 rounded-lg bg-[#00FFFF]/10 flex items-center justify-center">
+                        <CheckCircle2 size={16} className="text-[#00FFFF]" />
+                      </div>
+                      <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{t('pilot_feature_batch')}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 h-8 rounded-lg bg-[#00FFFF]/10 flex items-center justify-center">
+                        <CheckCircle2 size={16} className="text-[#00FFFF]" />
+                      </div>
+                      <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{t('pilot_feature_archive')}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 h-8 rounded-lg bg-[#00FFFF]/10 flex items-center justify-center">
+                        <CheckCircle2 size={16} className="text-[#00FFFF]" />
+                      </div>
+                      <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{t('pilot_feature_priority')}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Module Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
@@ -433,6 +546,62 @@ export default function Dashboard() {
 
         </div>
 
+        {/* Account & Access Section (ONLY for non-pilot users) */}
+        {!isPilotActive && (
+          <div className="mb-12">
+            <div className="glass-card p-8 border border-white/10 relative overflow-hidden bg-white/[0.02]">
+              <div className="absolute top-0 right-0 p-8 opacity-5 text-white">
+                <Users size={80} />
+              </div>
+              
+              <div className="max-w-xl">
+                <h2 className="text-sm font-black text-white uppercase tracking-[0.3em] mb-2 flex items-center gap-3">
+                  <Users size={18} className="text-white/40" />
+                  {t('account_access_title')}
+                </h2>
+                <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-8">
+                  {t('account_access_desc')}
+                </p>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-3 block">
+                      {t('account_invitation_code')}
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <input 
+                        type="text"
+                        value={invitationCode}
+                        onChange={(e) => setInvitationCode(e.target.value.toUpperCase())}
+                        placeholder={t('account_enter_code')}
+                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-6 py-3 text-xs font-bold text-white placeholder:text-white/20 focus:outline-none focus:border-[#00FFFF]/50 transition-all"
+                      />
+                      <button 
+                        onClick={handleApplyCode}
+                        disabled={applyingCode || !invitationCode.trim()}
+                        className="px-8 py-3 bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 transition-all"
+                      >
+                        {applyingCode ? t('common_loading') : t('pilot_apply_btn')}
+                      </button>
+                    </div>
+                    
+                    {pilotError && (
+                      <p className="mt-3 text-red-400 text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <AlertTriangle size={12} /> {pilotError}
+                      </p>
+                    )}
+                    {pilotSuccess && (
+                      <p className="mt-3 text-[#00FFFF] text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <CheckCircle2 size={12} /> {pilotSuccess}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Upsell for Free Users */}
         {plan === 'free' && (
           <motion.div
@@ -443,16 +612,16 @@ export default function Dashboard() {
             <div className="absolute top-0 right-0 p-8 opacity-5 text-[#00FFFF]">
               <Crown size={120} />
             </div>
-            <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-4">Elevate Your Grading Infrastructure</h2>
-            <p className="text-white/40 text-xs font-black uppercase tracking-widest mb-8 max-w-2xl mx-auto leading-relaxed">
-              You are currently on the <span className="text-[#00FFFF]">Free Tier</span>. 
-              Unlock full exam grading, historical archives, and advanced analytics to save up to 15 hours per week.
-            </p>
+            <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-4">{t('dash_upsell_title')}</h2>
+            <p 
+              className="text-white/40 text-xs font-black uppercase tracking-widest mb-8 max-w-2xl mx-auto leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: t('dash_upsell_desc', { plan: `<span className="text-[#00FFFF]">${t('dash_free_tier')}</span>` }) }}
+            />
             <button 
               onClick={() => navigate('/pricing')}
               className="btn-primary px-12 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-[#00FFFF]/20"
             >
-              View Upgrade Options
+              {t('btn_view_options')}
             </button>
           </motion.div>
         )}

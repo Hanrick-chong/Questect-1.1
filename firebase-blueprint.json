@@ -14,9 +14,34 @@
         "plan": { "type": "string", "enum": ["free", "starter", "pro", "advanced", "growth", "enterprise"] },
         "examGraderTrialsUsedToday": { "type": "number" },
         "lastTrialResetDate": { "type": "string", "format": "date" },
+        "teacherPilotAccess": { "type": "boolean" },
+        "teacherPilotStartDate": { "type": "string", "format": "date-time" },
+        "teacherPilotEndDate": { "type": "string", "format": "date-time" },
+        "teacherPilotDailyLimit": { "type": "number" },
+        "teacherPilotDailyUsage": { "type": "number" },
+        "teacherPilotLastUsageDate": { "type": "string", "format": "date" },
+        "teacherPilotUnlockedFeatures": { "type": "array", "items": { "type": "string" } },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role", "syllabus", "plan"]
+    },
+    "InvitationCode": {
+      "title": "Invitation Code",
+      "description": "A code used to grant special access to users.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive", "disabled"] },
+        "accessType": { "type": "string", "enum": ["teacher_pilot"] },
+        "durationDays": { "type": "number" },
+        "dailyLimit": { "type": "number" },
+        "unlockedFeatures": { "type": "array", "items": { "type": "string" } },
+        "isSingleUse": { "type": "boolean" },
+        "usedAt": { "type": "string", "format": "date-time" },
+        "assignedToUser": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "status", "accessType", "durationDays", "dailyLimit", "createdAt"]
     },
     "Subscription": {
       "title": "Subscription",
@@ -159,6 +184,10 @@
     "/reports/{reportId}": {
       "schema": "GradingReport",
       "description": "Consolidated grading reports for history tracking."
+    },
+    "/invitation_codes/{codeId}": {
+      "schema": "InvitationCode",
+      "description": "Invitation codes for special access."
     },
     "/enterprise_inquiries/{inquiryId}": {
       "schema": "EnterpriseInquiry",

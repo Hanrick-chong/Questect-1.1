@@ -17,6 +17,27 @@ service cloud.firestore {
     //   - plan: string (required) - 'free', 'starter', 'pro', etc.
     //   - examGraderTrialsUsedToday: number (optional)
     //   - lastTrialResetDate: timestamp (optional)
+    //   - teacherPilotAccess: bool (optional)
+    //   - teacherPilotStartDate: string (optional)
+    //   - teacherPilotEndDate: string (optional)
+    //   - teacherPilotDailyLimit: number (optional)
+    //   - teacherPilotDailyUsage: number (optional)
+    //   - teacherPilotLastUsageDate: string (optional)
+    //   - teacherPilotUnlockedFeatures: list (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: invitation_codes
+    // Document ID: codeId (auto-generated)
+    // Fields:
+    //   - code: string (required) - The invitation code
+    //   - type: string (required) - 'teacher_pilot'
+    //   - durationDays: number (required) - e.g., 30
+    //   - dailyLimit: number (required) - e.g., 20
+    //   - unlockedFeatures: list (required) - e.g., ['premium_dashboard']
+    //   - isActive: bool (required)
+    //   - usageCount: number (required)
+    //   - maxUsage: number (optional)
+    //   - expiresAt: timestamp (optional)
     //   - createdAt: timestamp (required)
     //
     // Collection: subscriptions
@@ -146,14 +167,33 @@ service cloud.firestore {
     // Domain Validators
     // ===============================================================
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'role', 'syllabus', 'displayName', 'photoURL', 'plan', 'examGraderTrialsUsedToday', 'lastTrialResetDate', 'createdAt']) &&
+      return hasOnlyAllowedFields(['uid', 'email', 'role', 'syllabus', 'displayName', 'photoURL', 'plan', 'examGraderTrialsUsedToday', 'lastTrialResetDate', 'teacherPilotAccess', 'teacherPilotStartDate', 'teacherPilotEndDate', 'teacherPilotDailyLimit', 'teacherPilotDailyUsage', 'teacherPilotLastUsageDate', 'teacherPilotUnlockedFeatures', 'createdAt']) &&
              data.uid == request.auth.uid &&
              isValidEmail(data.email) &&
              (data.role == null || data.role in ['educator', 'admin']) &&
              (data.plan == null || data.plan in ['free', 'starter', 'pro', 'advanced', 'growth', 'enterprise']) &&
              (data.examGraderTrialsUsedToday == null || data.examGraderTrialsUsedToday is number) &&
              (data.lastTrialResetDate == null || data.lastTrialResetDate is string) &&
+             (data.teacherPilotAccess == null || data.teacherPilotAccess is bool) &&
+             (data.teacherPilotStartDate == null || data.teacherPilotStartDate is string) &&
+             (data.teacherPilotEndDate == null || data.teacherPilotEndDate is string) &&
+             (data.teacherPilotDailyLimit == null || data.teacherPilotDailyLimit is number) &&
+             (data.teacherPilotDailyUsage == null || data.teacherPilotDailyUsage is number) &&
+             (data.teacherPilotLastUsageDate == null || data.teacherPilotLastUsageDate is string) &&
+             (data.teacherPilotUnlockedFeatures == null || data.teacherPilotUnlockedFeatures is list) &&
              (data.createdAt == null || data.createdAt is timestamp);
+    }
+
+    function isValidInvitationCode(data) {
+      return hasOnlyAllowedFields(['code', 'type', 'durationDays', 'dailyLimit', 'unlockedFeatures', 'isActive', 'usageCount', 'maxUsage', 'expiresAt', 'createdAt']) &&
+             data.code is string && data.code.size() > 0 &&
+             data.type == 'teacher_pilot' &&
+             data.durationDays is number &&
+             data.dailyLimit is number &&
+             data.unlockedFeatures is list &&
+             data.isActive is bool &&
+             data.usageCount is number &&
+             data.createdAt is timestamp;
     }
 
     function isValidSubscription(data) {
@@ -259,6 +299,11 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidFile(request.resource.data);
       allow update: if isDocOwner() && isValidFile(request.resource.data);
       allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /invitation_codes/{codeId} {
+      allow read: if isAuthenticated(); // Users can query for codes
+      allow write: if isAdmin();
     }
 
     match /enterprise_inquiries/{inquiryId} {

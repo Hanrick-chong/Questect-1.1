@@ -39,11 +39,13 @@ import { AI_CONFIG, getGeminiClient, getOpenAIClient, getDeepSeekClient } from '
 
 // Initialize PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-import { db, auth } from '../lib/firebase';
+import { db, auth, isTeacherPilotActive, incrementPilotUsage } from '../lib/firebase';
 import { cn } from '../lib/utils';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment } from 'firebase/firestore';
-import { APP_NAME } from '../lib/constants';
+import { APP_NAME, hasPilotFeatureAccess } from '../lib/constants';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 enum OperationType {
   CREATE = 'create',
@@ -147,6 +149,13 @@ interface UserProfile {
   plan: PlanTier;
   examGraderTrialsUsedToday: number;
   lastTrialResetDate: string;
+  teacherPilotAccess?: boolean;
+  teacherPilotStartDate?: string;
+  teacherPilotEndDate?: string;
+  teacherPilotDailyLimit?: number;
+  teacherPilotDailyUsage?: number;
+  teacherPilotLastUsageDate?: string;
+  teacherPilotUnlockedFeatures?: string[];
 }
 
 const PLAN_LIMITS: Record<PlanTier, { dailyTrials: number; canUseSystemS: boolean }> = {
@@ -198,6 +207,7 @@ interface WorkspaceProps {
 
 export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [step, setStep] = useState<'upload' | 'processing' | 'results'>('upload');
   const [academicLevel, setAcademicLevel] = useState<AcademicLevel>('SPM');
@@ -348,8 +358,18 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
   const startGrading = async () => {
     if (studentFiles.length === 0 || skemaFiles.length === 0) return;
     
-    // Plan & Trial Check (ONLY for System-S / Exam Grader)
-    if (mode === 'system' && userProfile) {
+    // Pilot Access Check
+    if (isTeacherPilotActive(userProfile)) {
+      if ((userProfile?.teacherPilotDailyUsage || 0) >= (userProfile?.teacherPilotDailyLimit || 20)) {
+        setError(JSON.stringify({
+          error: t('pilot_limit_reached', { limit: (userProfile?.teacherPilotDailyLimit || 20).toString() }),
+          operationType: 'WRITE',
+          path: 'reports'
+        }));
+        return;
+      }
+    } else if (mode === 'system' && userProfile) {
+      // Plan & Trial Check (ONLY for System-S / Exam Grader)
       const plan = userProfile.plan || 'free';
       const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
       
@@ -573,6 +593,11 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
       
       if (auth.currentUser) {
         try {
+          // Increment pilot usage if active
+          if (isTeacherPilotActive(userProfile)) {
+            await incrementPilotUsage(auth.currentUser.uid, userProfile);
+          }
+
           // Temporarily disabled to fix permission issues
           /*
           // Only increment trials if in System-S mode
@@ -768,29 +793,30 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
           </div>
         </div>
 
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8">
-          <div className="w-full md:w-auto">
-            <motion.h1 
-              key={mode}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="text-3xl md:text-4xl font-black text-white uppercase tracking-tighter flex items-center gap-3"
-            >
-              {mode === 'analyze' ? <Zap className="text-electric-cyan" size={28} /> : <Shield className="text-electric-purple" size={28} />}
-              {APP_NAME}-{mode === 'analyze' ? 'A' : 'S'}
-            </motion.h1>
-            <p className="text-white/40 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] md:tracking-[0.4em] mt-1">
-              {mode === 'analyze' ? 'Unlimited Batch Utility' : 'Professional Complex Audit'}
-            </p>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 w-full">
+            <div className="w-full md:w-auto">
+              <motion.h1 
+                key={mode}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="text-3xl md:text-4xl font-black text-white uppercase tracking-tighter flex items-center gap-3"
+              >
+                {mode === 'analyze' ? <Zap className="text-electric-cyan" size={28} /> : <Shield className="text-electric-purple" size={28} />}
+                {APP_NAME}-{mode === 'analyze' ? 'A' : 'S'}
+              </motion.h1>
+              <p className="text-white/40 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] md:tracking-[0.4em] mt-1">
+                {mode === 'analyze' ? t('dash_quick_grade') : t('dash_exam_grader')}
+              </p>
+            </div>
+            <LanguageSwitcher />
           </div>
           
-          <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4">
+          <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4 mb-8">
             {userProfile && mode === 'system' && (
               <div className="flex items-center gap-2 px-3 md:px-4 py-1.5 bg-white/5 border border-white/10 rounded-lg">
                 <Zap size={12} className="text-electric-cyan" />
                 <span className="text-[8px] md:text-[9px] font-black text-white/60 uppercase tracking-widest">
-                  {userProfile.examGraderTrialsUsedToday} / {PLAN_LIMITS[userProfile.plan || 'free']?.dailyTrials || 5} Trials
+                  {userProfile.examGraderTrialsUsedToday} / {PLAN_LIMITS[userProfile.plan || 'free']?.dailyTrials || 5} {t('work_trials')}
                 </span>
               </div>
             )}
@@ -798,13 +824,13 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
               <div className="flex items-center gap-2 px-3 md:px-4 py-1.5 bg-electric-cyan/10 border border-electric-cyan/20 rounded-lg">
                 <Check size={12} className="text-electric-cyan" />
                 <span className="text-[8px] md:text-[9px] font-black text-electric-cyan uppercase tracking-widest">
-                  Unlimited Free
+                  {t('work_unlimited_free')}
                 </span>
               </div>
             )}
             <button 
               onClick={() => {
-                if (userProfile && (userProfile.plan === 'growth' || userProfile.plan === 'enterprise')) {
+                if (userProfile && (userProfile.plan === 'growth' || userProfile.plan === 'enterprise' || hasPilotFeatureAccess(userProfile, 'premium_dashboard'))) {
                   navigate('/dashboard');
                 } else {
                   navigate('/pricing');
@@ -812,19 +838,19 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
               }}
               className={cn(
                 "px-4 md:px-6 py-2 border rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
-                userProfile && (userProfile.plan === 'growth' || userProfile.plan === 'enterprise')
+                userProfile && (userProfile.plan === 'growth' || userProfile.plan === 'enterprise' || hasPilotFeatureAccess(userProfile, 'premium_dashboard'))
                   ? "bg-electric-cyan/10 border-electric-cyan/20 text-electric-cyan hover:bg-electric-cyan/20"
                   : "bg-white/5 border-white/10 text-white/30 hover:text-white/60"
               )}
             >
               <LayoutDashboard size={12} /> 
-              <span className="hidden xs:inline">Institution</span>
-              {userProfile && !['growth', 'enterprise'].includes(userProfile.plan || 'free') && <Lock size={10} className="text-white/20" />}
+              <span className="hidden xs:inline">{t('work_institution')}</span>
+              {userProfile && !['growth', 'enterprise'].includes(userProfile.plan || 'free') && !hasPilotFeatureAccess(userProfile, 'premium_dashboard') && <Lock size={10} className="text-white/20" />}
             </button>
 
             <button 
               onClick={() => {
-                if (userProfile && ['pro', 'advanced', 'growth', 'enterprise'].includes(userProfile.plan)) {
+                if (userProfile && (['pro', 'advanced', 'growth', 'enterprise'].includes(userProfile.plan) || isTeacherPilotActive(userProfile))) {
                   navigate('/history');
                 } else {
                   navigate('/pricing');
@@ -832,21 +858,21 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
               }}
               className={cn(
                 "px-4 md:px-6 py-2 border rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
-                userProfile && ['pro', 'advanced', 'growth', 'enterprise'].includes(userProfile.plan)
+                userProfile && (['pro', 'advanced', 'growth', 'enterprise'].includes(userProfile.plan) || isTeacherPilotActive(userProfile))
                   ? "bg-electric-purple/10 border-electric-purple/20 text-electric-purple hover:bg-electric-purple/20"
                   : "bg-white/5 border-white/10 text-white/30 hover:text-white/60"
               )}
             >
               <HistoryIcon size={12} /> 
-              <span className="hidden xs:inline">History</span>
-              {userProfile && !['pro', 'advanced', 'growth', 'enterprise'].includes(userProfile.plan || 'free') && <Lock size={10} className="text-white/20" />}
+              <span className="hidden xs:inline">{t('work_history')}</span>
+              {userProfile && !['pro', 'advanced', 'growth', 'enterprise'].includes(userProfile.plan || 'free') && !isTeacherPilotActive(userProfile) && <Lock size={10} className="text-white/20" />}
             </button>
             {step !== 'upload' && (
               <button 
                 onClick={reset}
                 className="px-4 md:px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white transition-all flex items-center gap-2"
               >
-                <RotateCcw size={12} /> <span className="hidden xs:inline">Reset</span>
+                <RotateCcw size={12} /> <span className="hidden xs:inline">{t('work_reset')}</span>
               </button>
             )}
           </div>
@@ -1398,7 +1424,6 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
           )}
         </AnimatePresence>
       </div>
-    </div>
     </ErrorBoundary>
   );
 }

@@ -24,11 +24,14 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { APP_NAME } from '../lib/constants';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 type InquiryStep = 'FORM' | 'SUCCESS';
 
 export default function EnterpriseInquiry() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [step, setStep] = useState<InquiryStep>('FORM');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,15 +131,15 @@ export default function EnterpriseInquiry() {
           <div className="w-20 h-20 rounded-3xl bg-green-500/10 border border-green-500/20 flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-green-500/20">
             <CheckCircle2 className="text-green-400" size={40} />
           </div>
-          <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">Inquiry Submitted</h2>
+          <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">{t('enterprise_success_title')}</h2>
           <p className="text-white/40 text-xs font-medium uppercase tracking-widest leading-relaxed mb-10">
-            Thank you. Your inquiry has been submitted successfully. Our team will review your request and contact you using the email provided.
+            {t('enterprise_success_desc')}
           </p>
           <button 
             onClick={() => navigate('/')}
             className="btn-primary w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3"
           >
-            Return to Home
+            {t('enterprise_return_home')}
             <ArrowRight size={16} />
           </button>
         </motion.div>
@@ -156,28 +159,31 @@ export default function EnterpriseInquiry() {
           {/* Left Column: Info */}
           <div className="lg:col-span-5 space-y-12">
             <div>
-              <button 
-                onClick={() => navigate(-1)}
-                className="flex items-center gap-2 text-white/40 hover:text-white text-[10px] font-black uppercase tracking-widest mb-8 transition-colors"
-              >
-                <ArrowLeft size={14} /> Back
-              </button>
+              <div className="flex justify-between items-start mb-8">
+                <button 
+                  onClick={() => navigate(-1)}
+                  className="flex items-center gap-2 text-white/40 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors"
+                >
+                  <ArrowLeft size={14} /> {t('common_back')}
+                </button>
+                <LanguageSwitcher />
+              </div>
               <h1 className="text-5xl md:text-7xl font-black text-white uppercase tracking-tighter leading-[0.9] mb-6">
-                Enterprise <br />
-                <span className="text-electric-cyan">Inquiry</span>
+                {t('enterprise_title')} <br />
+                <span className="text-electric-cyan">{t('enterprise_subtitle')}</span>
               </h1>
               <p className="text-white/40 text-sm font-medium uppercase tracking-widest leading-relaxed mb-8">
-                Tell us about your school or institution, and we’ll help you find the right {APP_NAME} setup.
+                {t('enterprise_desc').replace('{appName}', APP_NAME)}
               </p>
               <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                 <p className="text-[10px] text-white/60 font-medium uppercase tracking-wider leading-relaxed">
-                  {APP_NAME} supports institution-oriented workflows such as multi-teacher access, class or group management, institution analytics, and custom setup discussions.
+                  {t('enterprise_support_info').replace('{appName}', APP_NAME)}
                 </p>
               </div>
             </div>
 
             <div className="space-y-6">
-              <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em]">Why {APP_NAME} Enterprise?</h3>
+              <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em]">{t('enterprise_why_title').replace('{appName}', APP_NAME)}</h3>
               <div className="grid gap-4">
                 {[
                   { icon: BarChart3, title: 'Institution Dashboard', desc: 'Centralized analytics for departments and schools.' },
@@ -213,11 +219,11 @@ export default function EnterpriseInquiry() {
                 <div className="space-y-6">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-electric-cyan" />
-                    <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">SECTION A — CONTACT DETAILS</h3>
+                    <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">{t('enterprise_section_a')}</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Full Name</label>
+                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_full_name')}</label>
                       <div className="relative">
                         <User className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
                         <input 
@@ -231,7 +237,7 @@ export default function EnterpriseInquiry() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Work Email</label>
+                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_work_email')}</label>
                       <div className="relative">
                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
                         <input 
@@ -245,7 +251,7 @@ export default function EnterpriseInquiry() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Phone Number (optional)</label>
+                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_phone')}</label>
                       <div className="relative">
                         <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
                         <input 
@@ -258,7 +264,7 @@ export default function EnterpriseInquiry() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Role / Position</label>
+                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_role')}</label>
                       <div className="relative">
                         <Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
                         <input 
@@ -273,7 +279,7 @@ export default function EnterpriseInquiry() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Institution / School Name</label>
+                    <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_institution_name')}</label>
                     <div className="relative">
                       <School className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
                       <input 
@@ -292,11 +298,11 @@ export default function EnterpriseInquiry() {
                 <div className="space-y-6">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-electric-purple" />
-                    <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">SECTION B — INSTITUTION DETAILS</h3>
+                    <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">{t('enterprise_section_b')}</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Institution Type</label>
+                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_institution_type')}</label>
                       <select 
                         required
                         value={formData.institutionType}
@@ -310,7 +316,7 @@ export default function EnterpriseInquiry() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Estimated Team Size</label>
+                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_team_size')}</label>
                       <select 
                         required
                         value={formData.teamSize}
@@ -324,7 +330,7 @@ export default function EnterpriseInquiry() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Main Exam / Academic Context</label>
+                      <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_academic_context')}</label>
                       <select 
                         required
                         value={formData.academicContext}
@@ -344,7 +350,7 @@ export default function EnterpriseInquiry() {
                 <div className="space-y-6">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-electric-cyan" />
-                    <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">SECTION C — INTEREST / NEEDS</h3>
+                    <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em]">{t('enterprise_section_c')}</h3>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {interestOptions.map(option => {
@@ -370,7 +376,7 @@ export default function EnterpriseInquiry() {
 
                 {/* Message */}
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">Message</label>
+                  <label className="text-[9px] font-black text-white/40 uppercase tracking-widest ml-1">{t('enterprise_message')}</label>
                   <textarea 
                     required
                     value={formData.message}
@@ -398,11 +404,11 @@ export default function EnterpriseInquiry() {
                   {isLoading ? (
                     <div className="flex items-center gap-3">
                       <Loader2 className="animate-spin" size={18} />
-                      <span>Submitting your inquiry...</span>
+                      <span>{t('enterprise_submitting')}</span>
                     </div>
                   ) : (
                     <>
-                      Submit Inquiry
+                      {t('enterprise_submit')}
                       <Send size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                     </>
                   )}

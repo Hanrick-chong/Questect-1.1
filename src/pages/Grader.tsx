@@ -393,7 +393,7 @@ export default function Grader({ mode }: GraderProps) {
               {mode === 'quick' ? t('mod_quick_grading') : t('mod_exam_grader')}
             </h2>
             <p className="text-electric-cyan font-black uppercase tracking-[0.3em] text-sm">
-              {mode === 'quick' ? 'Instant Feedback Node' : 'Batch Examination Processor'}
+              {mode === 'quick' ? t('dash_quick_grade') : t('dash_exam_grader')}
             </p>
           </div>
           <LanguageSwitcher />
@@ -407,12 +407,12 @@ export default function Grader({ mode }: GraderProps) {
               <div className="glass-card p-8 flex flex-col border border-white/5 h-full">
                 <h3 className="text-2xl font-black flex items-center gap-3 text-white tracking-tighter uppercase mb-8">
                   <BookOpen size={24} className="text-electric-purple" />
-                  THE ACADEMIC CONTEXT
+                  {t('about_tech_title')}
                 </h3>
 
                 <div className="space-y-6">
                   <div className="space-y-3">
-                    <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">Syllabus & Level</p>
+                    <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">{t('feat_syllabus_title')}</p>
                     <div className="relative group">
                       <select 
                         value={examLevel}
@@ -428,7 +428,7 @@ export default function Grader({ mode }: GraderProps) {
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">UPLOAD STUDENT WORK</p>
+                    <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">{t('grader_upload_work')}</p>
                     <div className="flex-grow flex flex-col gap-6">
                       {images.length === 0 && !input && (
                         <div className="flex-grow flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-3xl p-12 text-center group hover:border-electric-purple/30 transition-colors">
@@ -440,7 +440,7 @@ export default function Grader({ mode }: GraderProps) {
                               <FolderUp size={40} className="text-electric-purple" />
                             </div>
                             <div>
-                              <p className="text-xl font-black text-white tracking-tighter uppercase">SELECT SOURCE</p>
+                              <p className="text-xl font-black text-white tracking-tighter uppercase">{t('grader_smart_scan')}</p>
                               <p className="text-white/40 text-xs font-bold tracking-wide">Camera, File, or Smart Scan</p>
                             </div>
                           </button>
@@ -489,12 +489,12 @@ export default function Grader({ mode }: GraderProps) {
               <div className="glass-card p-8 flex flex-col border border-white/5 h-full">
                 <h3 className="text-2xl font-black flex items-center gap-3 text-white tracking-tighter uppercase mb-8">
                   <Brain size={24} className="text-electric-purple" />
-                  THE GRADING BRAIN
+                  {t('about_product_title')}
                 </h3>
 
                 <div className="flex-grow flex flex-col gap-6">
                   <div className="space-y-3 flex-grow flex flex-col">
-                    <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">Upload Skema / Marking Scheme</p>
+                    <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">{t('grader_upload_skema')}</p>
                     
                     {!skemaImage && !skema && (
                       <div className="flex-grow flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-3xl p-12 text-center group hover:border-electric-cyan/30 transition-colors mb-4">
@@ -506,7 +506,7 @@ export default function Grader({ mode }: GraderProps) {
                             <FolderUp size={40} className="text-electric-cyan" />
                           </div>
                           <div>
-                            <p className="text-xl font-black text-white tracking-tighter uppercase">SELECT SOURCE</p>
+                            <p className="text-xl font-black text-white tracking-tighter uppercase">{t('grader_smart_scan')}</p>
                             <p className="text-white/40 text-xs font-bold tracking-wide">Camera, File, or Smart Scan</p>
                           </div>
                         </button>

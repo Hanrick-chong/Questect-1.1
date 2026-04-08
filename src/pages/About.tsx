@@ -2,8 +2,11 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Heart, ShieldCheck, Sparkles } from 'lucide-react';
 import { APP_NAME } from '../lib/constants';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function About() {
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen pt-32 pb-20 px-6 relative overflow-hidden bg-oxford-blue">
       {/* Ambient Glows */}
@@ -16,8 +19,11 @@ export default function About() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-24"
         >
-          <h2 className="text-5xl md:text-7xl font-black mb-8 tracking-tighter uppercase">The Soul</h2>
-          <p className="text-electric-cyan text-2xl font-black italic tracking-tighter">"Global Standards. Local Precision."</p>
+          <div className="flex justify-end mb-8">
+            <LanguageSwitcher />
+          </div>
+          <h2 className="text-5xl md:text-7xl font-black mb-8 tracking-tighter uppercase">{t('about_title')}</h2>
+          <p className="text-electric-cyan text-2xl font-black italic tracking-tighter">"{t('home_hero_title')}"</p>
         </motion.div>
 
         <div className="space-y-24">
@@ -26,13 +32,10 @@ export default function About() {
               <div className="w-14 h-14 bg-electric-purple/10 rounded-2xl flex items-center justify-center shadow-lg">
                 <Heart className="text-electric-purple" size={28} />
               </div>
-              <h3 className="text-3xl font-black text-white tracking-tighter uppercase">Mission Statement</h3>
+              <h3 className="text-3xl font-black text-white tracking-tighter uppercase">{t('about_mission_title')}</h3>
             </div>
             <p className="text-white/60 text-xl leading-relaxed font-medium">
-              {APP_NAME} was born from a simple observation: teachers are drowning in paperwork. 
-              Our mission is to liberate educators from the mechanical burden of grading, 
-              allowing them to return to what truly matters—inspiring and communicating with students. 
-              We believe that by automating the "what" and "how much," we give teachers back the time to focus on the "why."
+              {t('about_mission_desc').replace('{appName}', APP_NAME)}
             </p>
           </section>
 
@@ -41,13 +44,10 @@ export default function About() {
               <div className="w-14 h-14 bg-electric-purple/10 rounded-2xl flex items-center justify-center shadow-lg">
                 <Sparkles className="text-electric-purple" size={28} />
               </div>
-              <h3 className="text-3xl font-black text-white tracking-tighter uppercase">Tech Purity</h3>
+              <h3 className="text-3xl font-black text-white tracking-tighter uppercase">{t('about_tech_title')}</h3>
             </div>
             <p className="text-white/60 text-xl leading-relaxed font-medium">
-              We don't just use AI; we refine it. {APP_NAME} leverages custom-optimized models like DeepSeek, 
-              specifically tuned for the educational vertical. Our models are trained to understand 
-              not just the correctness of an answer, but the pedagogical intent behind it. 
-              This ensures that our feedback is as constructive as it is accurate.
+              {t('about_tech_desc').replace('{appName}', APP_NAME)}
             </p>
           </section>
 
@@ -57,13 +57,10 @@ export default function About() {
                 <div className="w-14 h-14 bg-electric-purple/10 rounded-2xl flex items-center justify-center shadow-lg">
                   <ShieldCheck className="text-electric-purple" size={28} />
                 </div>
-                <h3 className="text-3xl font-black text-white tracking-tighter uppercase">Product-First Independence</h3>
+                <h3 className="text-3xl font-black text-white tracking-tighter uppercase">{t('about_product_title')}</h3>
               </div>
               <p className="text-white/60 text-xl leading-relaxed font-medium">
-                {APP_NAME} is a purely product-focused entity. We are independent of external agencies 
-                or institutional bureaucracies. This independence allows us to move fast, 
-                innovate without compromise, and keep our focus exactly where it belongs: 
-                on the teachers and students who use our platform every day.
+                {t('about_product_desc').replace('{appName}', APP_NAME)}
               </p>
             </div>
           </section>

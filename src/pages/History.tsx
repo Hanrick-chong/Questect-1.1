@@ -21,6 +21,8 @@ import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { APP_NAME } from '../lib/constants';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 interface UserProfile {
   plan: string;
@@ -37,6 +39,7 @@ interface GradingReport {
 
 export default function History() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [reports, setReports] = useState<GradingReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -90,7 +93,7 @@ export default function History() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to delete this record?")) {
+    if (window.confirm(t('history_delete_confirm'))) {
       try {
         await deleteDoc(doc(db, 'reports', id));
       } catch (err) {
@@ -113,7 +116,7 @@ export default function History() {
       <div className="min-h-screen bg-oxford-blue flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Clock className="text-electric-cyan animate-spin" size={40} />
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">Accessing Archives...</p>
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">{t('history_loading')}</p>
         </div>
       </div>
     );
@@ -125,20 +128,23 @@ export default function History() {
         
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-          <div>
-            <button 
-              onClick={() => navigate('/analyze')}
-              className="flex items-center gap-2 text-white/40 hover:text-white text-[10px] font-black uppercase tracking-widest mb-4 transition-colors"
-            >
-              <ArrowLeft size={14} /> Back to Workspace
-            </button>
+          <div className="w-full">
+            <div className="flex justify-between items-start mb-4">
+              <button 
+                onClick={() => navigate('/analyze')}
+                className="flex items-center gap-2 text-white/40 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors"
+              >
+                <ArrowLeft size={14} /> {t('history_back')}
+              </button>
+              <LanguageSwitcher />
+            </div>
             <h1 className="text-4xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
               <HistoryIcon className="text-electric-cyan" size={32} />
-              Grading Records
+              {t('history_title')}
             </h1>
             <div className="flex items-center gap-4 mt-1">
               <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.4em]">
-                Teacher History Review & Audit
+                {t('history_subtitle')}
               </p>
               {!isProOrAbove && (
                 <div className="flex items-center gap-2 px-2 py-0.5 bg-electric-purple/10 border border-electric-purple/20 rounded text-[8px] font-black text-electric-purple uppercase tracking-widest">
@@ -154,7 +160,7 @@ export default function History() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
               <input 
                 type="text"
-                placeholder="Search students..."
+                placeholder={t('history_search_placeholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-electric-cyan/50 transition-all"
@@ -167,7 +173,7 @@ export default function History() {
                 onChange={(e) => setFilterSubject(e.target.value)}
                 className="bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-8 text-[10px] font-black uppercase tracking-widest text-white/60 focus:outline-none appearance-none cursor-pointer"
               >
-                {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                {subjects.map(s => <option key={s} value={s}>{s === 'All' ? t('history_filter_all') : s}</option>)}
               </select>
             </div>
           </div>
@@ -176,18 +182,18 @@ export default function History() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="w-12 h-12 border-4 border-electric-cyan/20 border-t-electric-cyan rounded-full animate-spin" />
-            <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">Accessing Cloud Archives...</p>
+            <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">{t('history_loading')}</p>
           </div>
         ) : filteredReports.length === 0 ? (
           <div className="glass-card p-20 border border-white/10 text-center">
             <AlertCircle className="w-16 h-16 text-white/10 mx-auto mb-6" />
-            <h2 className="text-xl font-black text-white uppercase tracking-widest mb-2">No Records Found</h2>
-            <p className="text-white/40 text-sm mb-8">Your grading history will appear here once you complete an audit.</p>
+            <h2 className="text-xl font-black text-white uppercase tracking-widest mb-2">{t('history_no_records')}</h2>
+            <p className="text-white/40 text-sm mb-8">{t('history_no_records_desc')}</p>
             <button 
               onClick={() => navigate('/analyze')}
               className="btn-primary py-4 px-10 rounded-xl text-xs font-black uppercase tracking-widest"
             >
-              Start First Grading
+              {t('history_start_first')}
             </button>
           </div>
         ) : (
@@ -233,10 +239,10 @@ export default function History() {
 
                   <div className="flex items-center gap-4 w-full md:w-auto">
                     <div className="flex-grow md:flex-grow-0 text-right mr-4">
-                      <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mb-1">Audit Status</p>
+                      <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mb-1">{t('history_status_label')}</p>
                       <div className="flex items-center justify-end gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Completed</span>
+                        <span className="text-[10px] font-black text-white uppercase tracking-widest">{t('history_status_completed')}</span>
                       </div>
                     </div>
                     
@@ -260,7 +266,7 @@ export default function History() {
                         <Download size={16} />
                         {!isProOrAbove && (
                           <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-electric-purple text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                            Pro Feature
+                            {t('history_pro_feature')}
                           </div>
                         )}
                       </button>

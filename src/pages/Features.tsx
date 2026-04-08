@@ -2,42 +2,45 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Cpu, Scan, Target, BarChart3, Layers, Globe } from 'lucide-react';
 import { APP_NAME } from '../lib/constants';
+import { useLanguage } from '../lib/i18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Features() {
+  const { t } = useLanguage();
   const features = [
     {
-      title: "Hybrid Scoring Engine",
-      desc: "Combines strict marking schemes with deep logical reasoning for human-like accuracy.",
+      title: t('feat_hybrid_title'),
+      desc: t('feat_hybrid_desc'),
       icon: Cpu,
       size: "md:col-span-2"
     },
     {
-      title: "Smart Scan (OCR)",
-      desc: "Advanced handwriting recognition that turns messy scripts into structured data.",
+      title: t('feat_ocr_title'),
+      desc: t('feat_ocr_desc'),
       icon: Scan,
       size: "md:col-span-1"
     },
     {
-      title: "Syllabus Sync",
-      desc: "Native support for SPM, IGCSE, and regional standards with automatic logic alignment.",
+      title: t('feat_syllabus_title'),
+      desc: t('feat_syllabus_desc'),
       icon: Globe,
       size: "md:col-span-1"
     },
     {
-      title: "Fine-Grained Feedback",
-      desc: "Detailed point-by-point analysis showing exactly where marks were earned or lost.",
+      title: t('feat_feedback_title'),
+      desc: t('feat_feedback_desc'),
       icon: Target,
       size: "md:col-span-2"
     },
     {
-      title: "Student Profiling",
-      desc: "AI-driven progress tracking and weakness identification across multiple assessments.",
+      title: t('feat_profiling_title'),
+      desc: t('feat_profiling_desc'),
       icon: BarChart3,
       size: "md:col-span-1"
     },
     {
-      title: "Class Analytics",
-      desc: "Instant reports on class-wide performance trends and common misconception areas.",
+      title: t('feat_analytics_title'),
+      desc: t('feat_analytics_desc'),
       icon: Layers,
       size: "md:col-span-2"
     }
@@ -55,9 +58,11 @@ export default function Features() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-20"
         >
-          <h2 className="text-5xl md:text-7xl font-black mb-4 tracking-tighter uppercase">The Muscle</h2>
-          <p className="text-white/40 text-lg font-black uppercase tracking-[0.4em] mb-10">{APP_NAME} Core Technology</p>
-          <p className="text-white/40 text-xl font-medium tracking-wide">Precision-engineered tools for the modern educator.</p>
+          <div className="flex justify-end mb-8">
+            <LanguageSwitcher />
+          </div>
+          <h2 className="text-5xl md:text-7xl font-black mb-4 tracking-tighter uppercase">{t('features_title')}</h2>
+          <p className="text-white/40 text-lg font-black uppercase tracking-[0.4em] mb-10">{APP_NAME} {t('features_subtitle')}</p>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

@@ -91,3 +91,14 @@ export const PLAN_FEATURES: Record<UserPlan, string[]> = {
 export function hasPlanAccess(currentPlan: UserPlan, requiredPlan: UserPlan): boolean {
   return PLAN_HIERARCHY[currentPlan] >= PLAN_HIERARCHY[requiredPlan];
 }
+
+export function hasPilotFeatureAccess(userProfile: any, feature: string): boolean {
+  if (!userProfile?.teacherPilotAccess) return false;
+  
+  const endDate = new Date(userProfile.teacherPilotEndDate);
+  const now = new Date();
+  
+  if (now > endDate) return false;
+  
+  return userProfile.teacherPilotUnlockedFeatures?.includes(feature) || false;
+}
