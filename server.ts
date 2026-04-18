@@ -147,7 +147,7 @@ async function logPaymentEvent(uid: string, eventType: string, data: any) {
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 8080;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Stripe Webhook Endpoint (Must be before express.json())
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {

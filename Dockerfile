@@ -26,7 +26,7 @@ COPY --from=builder /app/firebase-applet-config.json ./firebase-applet-config.js
 
 # Expose port and start
 ENV NODE_ENV=production
-ENV PORT=8080
-EXPOSE 8080
+ENV PORT=3000
+EXPOSE 3000
 
 CMD ["node", "dist/server.js"]

@@ -185,7 +185,7 @@ service cloud.firestore {
     }
 
     function isValidInvitationCode(data) {
-      return hasOnlyAllowedFields(['code', 'type', 'durationDays', 'dailyLimit', 'unlockedFeatures', 'isActive', 'usageCount', 'maxUsage', 'expiresAt', 'createdAt']) &&
+      return hasOnlyAllowedFields(['code', 'type', 'durationDays', 'dailyLimit', 'unlockedFeatures', 'isActive', 'usageCount', 'maxUsage', 'expiresAt', 'createdAt', 'status', 'usedAt', 'assignedToUser']) &&
              data.code is string && data.code.size() > 0 &&
              data.type == 'teacher_pilot' &&
              data.durationDays is number &&
@@ -227,12 +227,13 @@ service cloud.firestore {
     }
 
     function isValidReport(data) {
-      return hasOnlyAllowedFields(['userId', 'timestamp', 'academicLevel', 'subject', 'reports', 'mode']) &&
+      return hasOnlyAllowedFields(['userId', 'timestamp', 'academicLevel', 'subject', 'reports', 'mode', 'studentCount', 'studentName', 'ocrConfidence', 'hadWarnings', 'examLevel', 'result']) &&
              data.userId == request.auth.uid &&
              data.timestamp is timestamp &&
-             data.reports is list &&
+             (data.reports == null || data.reports is list) &&
+             (data.result == null || data.result is string) &&
              (data.subject == null || data.subject is string) &&
-             data.mode in ['analyze', 'system'];
+             data.mode in ['analyze', 'system', 'quick', 'exam'];
     }
 
     function isValidPaymentEvent(data) {

@@ -393,10 +393,10 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
       const ai = getGeminiClient();
       const openai = getOpenAIClient();
       
-      // Convert files to parts (ONLY images are sent as vision parts)
-      const filterImageFiles = (files: File[]) => files.filter(f => f.type.startsWith('image/'));
-      const studentImageParts = await Promise.all(filterImageFiles(studentFiles).map(fileToPart));
-      const skemaImageParts = await Promise.all(filterImageFiles(skemaFiles).map(fileToPart));
+      // Convert files to parts (Images and PDFs are sent as visual parts for Gemini)
+      const filterVisualFiles = (files: File[]) => files.filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+      const studentVisualParts = await Promise.all(filterVisualFiles(studentFiles).map(fileToPart));
+      const skemaVisualParts = await Promise.all(filterVisualFiles(skemaFiles).map(fileToPart));
 
       // 1. Subject Detection & Radar (Using Flash for speed)
       setProcessingStage('Radar Scanning: Detecting Subject...');
@@ -405,13 +405,14 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
         contents: [
           { text: "--- REFERENCE MARKING SCHEME (SKEMA) ---" },
           { text: extractedSkemaText },
-          ...skemaImageParts.map(p => ({ inlineData: p.inlineData })),
+          ...skemaVisualParts.map(p => ({ inlineData: p.inlineData })),
           { text: "--- STUDENT WORK TO BE ANALYZED ---" },
           { text: extractedStudentText },
-          ...studentImageParts.map(p => ({ inlineData: p.inlineData })),
+          ...studentVisualParts.map(p => ({ inlineData: p.inlineData })),
           { text: `Identify the subject and academic level. 
                    Academic Level Context: ${academicLevel}. 
                    Check if the student work matches the marking scheme subject.
+                   IMPORTANT: If the PDF/Image contains handwriting, use visual analysis to detect the subject.
                    Return JSON with: subject, isMismatch (boolean), language.` }
         ],
         config: {
@@ -447,10 +448,11 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
                      你必须按照以下三个步骤执行，严禁随机选取：
                      
                      1. 多学生点名 (Student Census):
-                     - 必须扫描 PDF 的【每一页】。
+                     - 必须扫描 PDF/图像 的【每一页】。
                      - 识别手写姓名（如：Chan Yu Xiang, Daniel Mok, Yang Wen Tay 等）。
-                     - 只要发现新的姓名或明显的笔迹变化，就必须创建一个新的“学生档案”。
+                     - 只要发现新的姓名 or 明显的笔迹变化，就必须创建一个新的“学生档案”。
                      - 严禁遗漏：如果 PDF 有 10 个学生，你必须输出 10 个批改结果。
+                     - 如果 PDF 是由照片转换而成的（Image-based PDF），请务必通过视觉分析识别手写内容。
                      
                      2. 学科与等级锁定 (Academic Context):
                      - 自动检测语言：检测到 Bahasa Melayu 必须使用马来西亚教育标准 (UASA/SPM)。
@@ -487,10 +489,10 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
 ` },
             { text: "--- OFFICIAL MARKING SCHEME (SKEMA) - ABSOLUTE TRUTH ---" },
             { text: extractedSkemaText },
-            ...skemaImageParts.map(p => ({ inlineData: p.inlineData })),
+            ...skemaVisualParts.map(p => ({ inlineData: p.inlineData })),
             { text: "--- STUDENT SUBMISSIONS (TARGET FOR GRADING) ---" },
             { text: extractedStudentText },
-            ...studentImageParts.map(p => ({ inlineData: p.inlineData }))
+            ...studentVisualParts.map(p => ({ inlineData: p.inlineData }))
           ],
           config: {
             responseMimeType: "application/json",
@@ -564,12 +566,12 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
               { type: "text", text: "Marking Scheme (Skema):" },
               ...skemaFiles.map(file => ({
                 type: "image_url",
-                image_url: { url: `data:${file.type};base64,${skemaImageParts[0]?.inlineData?.data || ''}` }
+                image_url: { url: `data:${file.type};base64,${skemaVisualParts[0]?.inlineData?.data || ''}` }
               })),
               { type: "text", text: "Student Submissions:" },
               ...studentFiles.map(file => ({
                 type: "image_url",
-                image_url: { url: `data:${file.type};base64,${studentImageParts[0]?.inlineData?.data || ''}` }
+                image_url: { url: `data:${file.type};base64,${studentVisualParts[0]?.inlineData?.data || ''}` }
               }))
             ]
           }
@@ -598,34 +600,35 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
             await incrementPilotUsage(auth.currentUser.uid, userProfile);
           }
 
-          // Temporarily disabled to fix permission issues
-          /*
           // Only increment trials if in System-S mode
           if (mode === 'system') {
             const userRef = doc(db, 'users', auth.currentUser.uid);
             await updateDoc(userRef, {
               examGraderTrialsUsedToday: increment(1)
-            });
+            }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `users/${auth.currentUser?.uid}`));
             
             // Update local state
             setUserProfile(prev => prev ? {
               ...prev,
-              examGraderTrialsUsedToday: prev.examGraderTrialsUsedToday + 1
+              examGraderTrialsUsedToday: (prev.examGraderTrialsUsedToday || 0) + 1
             } : null);
           }
 
-          await addDoc(collection(db, 'reports'), {
+          const reportsPath = 'reports';
+          await addDoc(collection(db, reportsPath), {
             userId: auth.currentUser.uid,
             timestamp: serverTimestamp(),
             academicLevel,
             subject: radarData.subject,
             reports: finalReports,
-            mode: mode // Track which mode was used
-          });
-          */
+            mode: mode, // Track which mode was used
+            studentCount: finalReports.length,
+            studentName: finalReports[0]?.studentName || "Student",
+            ocrConfidence: "high", // Default for Gemini 1.5 Pro
+            hadWarnings: false
+          }).catch(err => handleFirestoreError(err, OperationType.WRITE, reportsPath));
         } catch (err) {
           console.warn("Firestore logging failed:", err);
-          // handleFirestoreError(err, OperationType.WRITE, 'reports');
         }
       }
 

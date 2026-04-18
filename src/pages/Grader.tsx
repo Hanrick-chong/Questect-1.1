@@ -77,6 +77,23 @@ export default function Grader({ mode }: GraderProps) {
     return () => unsubscribe();
   }, []);
 
+  const fileToPart = async (file: File) => {
+    return new Promise<{ inlineData: { data: string; mimeType: string } }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        resolve({
+          inlineData: {
+            data: base64,
+            mimeType: file.type,
+          },
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
@@ -200,7 +217,7 @@ export default function Grader({ mode }: GraderProps) {
   };
 
   const runOCR = async () => {
-    if (!input && images.length === 0) return;
+    if (!input && images.length === 0 && studentFiles.length === 0) return;
     
     setIsGrading(true);
     setGradingStage('Validating Image Quality...');
@@ -221,6 +238,7 @@ export default function Grader({ mode }: GraderProps) {
         TASK 2: Extract Content
         Extract all text from the student work. Identify questions, student answers, and student names.
         Maintain structure even if complex (tables, columns).
+        IMPORTANT: If the file is an image-based PDF or a photo, use visual analysis to recognize handwriting.
         
         TASK 3: Confidence Assessment
         Rate your overall confidence in the extraction as "high", "medium", or "low".
@@ -244,14 +262,18 @@ export default function Grader({ mode }: GraderProps) {
         }
       `;
 
+      const filterVisualFiles = (files: File[]) => files.filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+      const studentVisualParts = await Promise.all(filterVisualFiles(studentFiles).map(fileToPart));
+      const skemaVisualParts = skemaFile ? [await fileToPart(skemaFile)] : [];
+
       const parts: any[] = [];
-      images.forEach((img) => {
-        parts.push({ inlineData: { data: img.split(',')[1], mimeType: 'image/jpeg' } });
+      studentVisualParts.forEach((p) => {
+        parts.push({ inlineData: p.inlineData });
       });
       
-      if (skemaImage && skemaFile) {
-        parts.push({ inlineData: { data: skemaImage.split(',')[1], mimeType: skemaFile.type } });
-      }
+      skemaVisualParts.forEach((p) => {
+        parts.push({ inlineData: p.inlineData });
+      });
 
       parts.push({ text: `Student Input (Text): ${input}\n\nMarking Scheme (Text): ${skema}\n\n${ocrPrompt}` });
 
