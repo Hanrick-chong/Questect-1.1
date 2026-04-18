@@ -262,13 +262,10 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
             // Check if we need to reset trials (daily reset)
             const today = new Date().toISOString().split('T')[0];
             if (data.lastTrialResetDate !== today) {
-              // Temporarily disabled to prevent permission errors
-              /*
               await updateDoc(doc(db, 'users', user.uid), {
                 examGraderTrialsUsedToday: 0,
                 lastTrialResetDate: today
-              });
-              */
+              }).catch(err => console.error("Reset Trials Error:", err));
               setUserProfile({ ...data, examGraderTrialsUsedToday: 0, lastTrialResetDate: today });
             } else {
               setUserProfile(data);
@@ -281,6 +278,53 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
     });
     return () => unsubscribe();
   }, [navigate]);
+
+  // Handle reportId loading
+  useEffect(() => {
+    const handleDeepLink = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const reportId = params.get('reportId');
+      
+      if (reportId && auth.currentUser) {
+        try {
+          setIsProcessing(true);
+          setProcessingStage(t('common_loading'));
+          const reportDoc = await getDoc(doc(db, 'reports', reportId));
+          if (reportDoc.exists()) {
+            const data = reportDoc.data();
+            if (data.userId === auth.currentUser.uid) {
+              if (data.reports) {
+                setStudentReports(data.reports);
+              } else if (data.result) {
+                // Compatibility with legacy string reports
+                setStudentReports([{
+                  studentName: data.studentName || 'Student',
+                  results: [{
+                    id: '1',
+                    question: 'Overall Assessment',
+                    status: 'correct',
+                    score: 1,
+                    maxScore: 1,
+                    feedback: data.result,
+                    improvement: 'Review the archive for more details.'
+                  }]
+                }]);
+              }
+              setDetectedSubject(data.subject);
+              setAcademicLevel(data.academicLevel || 'SPM');
+              setMode(data.mode || 'analyze');
+              setStep('results');
+            }
+          }
+        } catch (err) {
+          console.error("Error loading report:", err);
+        } finally {
+          setIsProcessing(false);
+        }
+      }
+    };
+    handleDeepLink();
+  }, [auth.currentUser, t]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'student' | 'skema') => {
     if (e.target.files) {
@@ -400,6 +444,13 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
 
       // 1. Subject Detection & Radar (Using Flash for speed)
       setProcessingStage('Radar Scanning: Detecting Subject...');
+      
+      const hasImages = studentVisualParts.length > 0;
+      const textIsEmpty = !extractedStudentText || extractedStudentText.trim().length < 10;
+      const visualWarningText = (hasImages && textIsEmpty) 
+        ? "\n\nCRITICAL NOTE: Plain text extraction from student files produced no significant content. The files are likely images, photos, or hand-written PDFs. You MUST utilize your VISUAL ANALYSIS capability on the attached images/PDFs to recognize the student's work and detect names."
+        : "";
+
       const radarResponse = await ai.models.generateContent({
         model: AI_CONFIG.GEMINI.FLASH_MODEL,
         contents: [
@@ -407,7 +458,7 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
           { text: extractedSkemaText },
           ...skemaVisualParts.map(p => ({ inlineData: p.inlineData })),
           { text: "--- STUDENT WORK TO BE ANALYZED ---" },
-          { text: extractedStudentText },
+          { text: extractedStudentText + visualWarningText },
           ...studentVisualParts.map(p => ({ inlineData: p.inlineData })),
           { text: `Identify the subject and academic level. 
                    Academic Level Context: ${academicLevel}. 
@@ -558,20 +609,21 @@ export default function Workspace({ initialMode = 'analyze' }: WorkspaceProps) {
         const messages: any[] = [
           {
             role: "system",
-            content: `You are a Master Examiner. Identify students and grade against skema. Return JSON array of StudentReport objects.`
+            content: `You are a Master Examiner. Identify students and grade against skema. Return JSON array of StudentReport objects. 
+                     Format: { "reports": [ { "studentName": string, "results": [...] } ] }`
           },
           {
             role: "user",
             content: [
               { type: "text", text: "Marking Scheme (Skema):" },
-              ...skemaFiles.map(file => ({
+              ...skemaVisualParts.map((part) => ({
                 type: "image_url",
-                image_url: { url: `data:${file.type};base64,${skemaVisualParts[0]?.inlineData?.data || ''}` }
+                image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` }
               })),
               { type: "text", text: "Student Submissions:" },
-              ...studentFiles.map(file => ({
+              ...studentVisualParts.map((part) => ({
                 type: "image_url",
-                image_url: { url: `data:${file.type};base64,${studentVisualParts[0]?.inlineData?.data || ''}` }
+                image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` }
               }))
             ]
           }

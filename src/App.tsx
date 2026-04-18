@@ -99,7 +99,7 @@ function AppContent() {
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/about" element={<About />} />
             <Route path="/grader/quick" element={<AuthGuard><Grader mode="quick" /></AuthGuard>} />
-            <Route path="/grader/exam" element={<AuthGuard requiredPlan="starter"><Grader mode="exam" /></AuthGuard>} />
+            <Route path="/grader/exam" element={<AuthGuard><Grader mode="exam" /></AuthGuard>} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/analyze" element={<AuthGuard><Workspace initialMode="analyze" /></AuthGuard>} />
             <Route path="/system" element={<AuthGuard><Workspace initialMode="system" /></AuthGuard>} />

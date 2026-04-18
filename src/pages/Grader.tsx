@@ -60,7 +60,17 @@ export default function Grader({ mode }: GraderProps) {
       if (user) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
-          setUserProfile(userDoc.data());
+          const data = userDoc.data();
+          const today = new Date().toISOString().split('T')[0];
+          if (data.lastTrialResetDate !== today) {
+            await updateDoc(doc(db, 'users', user.uid), {
+              examGraderTrialsUsedToday: 0,
+              lastTrialResetDate: today
+            }).catch(console.error);
+            setUserProfile({ ...data, examGraderTrialsUsedToday: 0, lastTrialResetDate: today });
+          } else {
+            setUserProfile(data);
+          }
         }
 
         // Check for reportId in URL
@@ -69,7 +79,14 @@ export default function Grader({ mode }: GraderProps) {
         if (reportId) {
           const reportDoc = await getDoc(doc(db, 'reports', reportId));
           if (reportDoc.exists() && reportDoc.data().userId === user.uid) {
-            setResult(reportDoc.data().result);
+            const data = reportDoc.data();
+            if (data.result) {
+              setResult(data.result);
+            } else if (data.reports) {
+              // Convert structured reports back to markdown for simple view
+              const markdown = data.reports.map((r: any) => `## Student: ${r.studentName}\n\n${r.results.map((res: any) => `**${res.question}**: ${res.score}/${res.maxScore}\n${res.feedback}`).join('\n\n')}`).join('\n\n---\n\n');
+              setResult(markdown);
+            }
           }
         }
       }
@@ -317,9 +334,9 @@ export default function Grader({ mode }: GraderProps) {
     // Check usage limits for free users in Exam mode
     if (mode === 'exam' && userProfile?.plan === 'free') {
       const today = new Date().toISOString().split('T')[0];
-      if (userProfile.lastTrialResetDate !== today) {
-        // Reset trials logic
-      } else if (userProfile.examGraderTrialsUsedToday >= 5) {
+      const trialsUsed = userProfile.lastTrialResetDate === today ? (userProfile.examGraderTrialsUsedToday || 0) : 0;
+      
+      if (trialsUsed >= 5) {
         setResult("You have reached your daily limit of 5 Exam Grader trials. Please upgrade to Starter for unlimited access.");
         setIsOcrReviewing(false);
         return;
